@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">WhereYouAtTwo</string>
+    <string name="google_maps_key">AIzaSyDHaFYs8cUyI1Ta5RtOxhg1pXPAd2W9RBs</string>
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+    <string name="nav_header_title">Where You At?!</string>
+    <string name="nav_header_subtitle">Version 1.0</string>
+    <string name="nav_header_desc">Navigation header</string>
+    <string name="action_settings">Settings</string>
+
+    <string name="menu_home">Home</string>
+    <string name="menu_gallery">Gallery</string>
+    <string name="menu_slideshow">Slideshow</string>
+    <string name="join_create_group_frag_message">You can join an existing group or create your own!</string>
+    <string name="title_activity_not_signed_in">FullscreenActivity</string>
+    <string name="dummy_button">Dummy Button</string>
+    <string name="dummy_content">DUMMY\nCONTENT</string>
+    <string name="not_signed_in_activity_main_text">You are not currently signed in.  Click below and we will get that fixed up.</string>
+    <string name="btn_signin_text">Sign In</string>
+    <string name="action_signinorout">sign in/out bitch</string>
+    <string name="not_in_trip_msg">Not currently in a group.</string>
+    <string name="service_status">Service is not currently running</string>
+</resources>
