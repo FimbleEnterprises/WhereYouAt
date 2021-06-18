@@ -6,6 +6,37 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <TableLayout
+        android:id="@+id/tableLayout_top_table"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:paddingBottom="2dp"
+        android:paddingTop="2dp">
+
+        <TableRow
+            android:id="@+id/tableRow_0"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
+
+                <TextView
+                    android:id="@+id/txtDebugText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="10 seconds until camera reset"
+                    android:textAlignment="center" />
+
+            </FrameLayout>
+        </TableRow>
+
+    </TableLayout>
+
+
     <TextView
         android:id="@+id/txtNotInTrip"
         android:layout_width="wrap_content"
@@ -18,6 +49,7 @@
         android:id="@+id/tableLayout_main_table"
         android:layout_width="fill_parent"
         android:layout_height="match_parent"
+        android:layout_below="@id/tableLayout_top_table"
         android:layout_marginTop="10dp"
         android:paddingTop="2dp"
         android:paddingBottom="2dp">

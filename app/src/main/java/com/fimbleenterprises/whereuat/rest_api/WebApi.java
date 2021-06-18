@@ -40,6 +40,10 @@ public class WebApi {
      */
     public static class OperationResults {
 
+        // Server returned error strings
+        public static final String ERROR_TRIP_NOT_FOUND = "ERROR_TRIP_NOT_FOUND";
+
+
         /**
          * An ArrayList of OperationResult objects.
          */

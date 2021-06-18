@@ -5,7 +5,7 @@ import android.util.Log;
 import com.fimbleenterprises.whereuat.MyApp;
 import com.fimbleenterprises.whereuat.rest_api.Requests;
 import com.fimbleenterprises.whereuat.rest_api.WebApi;
-import com.fimbleenterprises.whereuat.preferences.MySettingsHelper;
+import com.fimbleenterprises.whereuat.helpers.MySettingsHelper;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.messaging.FirebaseMessaging;
 

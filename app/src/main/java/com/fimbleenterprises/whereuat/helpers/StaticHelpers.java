@@ -1,4 +1,4 @@
-package com.fimbleenterprises.whereuat;
+package com.fimbleenterprises.whereuat.helpers;
 
 import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
@@ -20,10 +20,12 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.location.Location;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Environment;
+import android.preference.PreferenceManager;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -39,17 +41,42 @@ import android.webkit.MimeTypeMap;
 import android.widget.ScrollView;
 import android.widget.Toast;
 
+import com.fimbleenterprises.whereuat.MainActivity;
+import com.fimbleenterprises.whereuat.MyApp;
+import com.fimbleenterprises.whereuat.R;
+import com.google.android.gms.maps.model.LatLng;
+
+import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
+import org.joda.time.Days;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.RoundingMode;
+import java.net.URL;
 import java.net.URLConnection;
 import java.nio.channels.FileChannel;
+import java.text.DateFormat;
 import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Calendar;
+import java.util.Currency;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Random;
+import java.util.TimeZone;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.RequiresApi;
@@ -60,7 +87,7 @@ import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 
 public class StaticHelpers {
     
-    public static class Notifications {
+   /* public static class Notifications {
 
         private static final String TAG = "Helpers.Notifications";
         
@@ -101,15 +128,15 @@ public class StaticHelpers {
             mNotificationManager = (NotificationManager) context.getApplicationContext()
                     .getSystemService(context.getApplicationContext().NOTIFICATION_SERVICE);
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                String channelId = "22";
-                NotificationChannel channel = new NotificationChannel(
-                        channelId,
-                        "WHEREYOUAT",
-                        importance);
-                mNotificationManager.createNotificationChannel(channel);
-                mBuilder.setChannelId(channelId);
-            }
+            String channelId = "22";
+            NotificationChannel channel = new NotificationChannel(
+                    channelId,
+                    "WHEREYOUAT",
+                    importance);
+
+            assert mNotificationManager != null;
+            mNotificationManager.createNotificationChannel(channel);
+            mBuilder.setChannelId(channelId);
 
             Notification notif = mBuilder.build();
 
@@ -119,7 +146,7 @@ public class StaticHelpers {
 
             return notif;
         }
-    }
+    }*/
 
     public static class Permissions extends AppCompatActivity {
 
@@ -970,19 +997,13 @@ public class StaticHelpers {
         }
     }
 
-    public static class Listeners {
-        public interface DecoderListener {
-            public void onSuccess(File decodedFile);
-            public void onFailure(String error);
-        }
-
-        public interface EncoderListener {
-            public void onSuccess(String base64String);
-            public void onFailure(String error);
-        }
-    }
-
     public static class Bitmaps {
+
+        public interface GetImageFromUrlListener {
+            void onSuccess(Bitmap bitmap);
+            void onFailure(String msg);
+        }
+
         public static Bitmap getBitmapFromResource(Context context, @DrawableRes int resource) {
             return BitmapFactory.decodeResource(context.getResources(),
                     resource);
@@ -1102,9 +1123,87 @@ public class StaticHelpers {
                 return null;
             }
         }
+
+        /**
+         * Attempts to retrieve a bitmap from a url.  This is performed on the same thread it is
+         * called from!  Perhaps you want to use the asynchronous version of this method with a listener?
+         * @param url The url to query.
+         * @return A bitmap on success, null on failure.
+         */
+        public static Bitmap getFromUrl(final String url) {
+            try {
+                URL strUrl = new URL(url);
+                return BitmapFactory.decodeStream(strUrl.openConnection().getInputStream());
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        /**
+         * Attempts to retrieve a bitmap from a url asynchronously.
+         * @param url The url to query.
+         * @param listener A listener to report the result and deliver the bitmap.
+         */
+        public static void getFromUrl(final String url, final GetImageFromUrlListener listener) {
+
+            AsyncTask<String, String, String> task = new AsyncTask<String, String, String>() {
+                private static final String TAG = "Bitmaps";
+                public static final String SUCCESS_MSG = "SUCCESS";
+                Bitmap image;
+
+                @Override
+                protected void onPreExecute() {
+                    super.onPreExecute();
+                    Log.i(TAG, "onPreExecute | Attempting to retrieve bitmap from:\n" + url + "...");
+                }
+
+                @Override
+                protected String doInBackground(String... args) {
+                    try {
+                        URL strUrl = new URL(url);
+                        image = BitmapFactory.decodeStream(strUrl.openConnection().getInputStream());
+                        return null;
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        return e.getLocalizedMessage();
+                    }
+                }
+
+                @Override
+                protected void onPostExecute(String val) {
+                    super.onPostExecute(val);
+                    if (image != null) {
+                        listener.onSuccess(image);
+                        Log.i(TAG, "onPostExecute | Aync bitmap retrieval: " + SUCCESS_MSG);
+                    } else {
+                        listener.onFailure(val);
+                        Log.w(TAG, "onPostExecute: | Async bitmap retrieval failed (" + val + ")");
+                    }
+                }
+            };
+
+            // The lack of this check has burned me before.  It's verbose and not always needed for reasons
+            // unknown but I'd leave it!
+            if(Build.VERSION.SDK_INT >= 11/*HONEYCOMB*/) {
+                task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+            } else {
+                task.execute();
+            }
+        }
     }
 
     public static class Files {
+
+        public interface DecoderListener {
+            public void onSuccess(File decodedFile);
+            public void onFailure(String error);
+        }
+
+        public interface EncoderListener {
+            public void onSuccess(String base64String);
+            public void onFailure(String error);
+        }
 
         private static final String TAG = "Files";
 
@@ -1134,7 +1233,7 @@ public class StaticHelpers {
          * @param filePath The path to the file to encode.
          * @param listener A listener to monitor the results.
          */
-        public static void base64Encode(final String filePath, final Listeners.EncoderListener listener) {
+        public static void base64Encode(final String filePath, final EncoderListener listener) {
 
             final AsyncTask<String, String, String> task = new AsyncTask<String, String, String>() {
 
@@ -1219,7 +1318,7 @@ public class StaticHelpers {
          * @param listener A listener to monitor completion.
          * @return A File file that by default exists in the app's temp directory.
          */
-        public static void base64Decode(final String base64string, final File outputFile, final Listeners.DecoderListener listener) {
+        public static void base64Decode(final String base64string, final File outputFile, final DecoderListener listener) {
 
             AsyncTask<String, String, String> task = new AsyncTask<String, String, String>() {
 
@@ -1715,6 +1814,109 @@ public class StaticHelpers {
         }
     }
 
+    public static class Numbers {
+
+        /**
+         * Checks if a number is numeric (kind of an expensive operation so if it needs to be done a
+         * ton then roll a different way)
+         **/
+        public static boolean isNumeric(String str) {
+            try {
+                float d = Float.parseFloat(str);
+            } catch (NumberFormatException nfe) {
+                return false;
+            }
+            return true;
+        }
+
+        public static int makeRandomInt() {
+            String strLng = Long.toString(System.currentTimeMillis());
+            String subStrLng = strLng.substring(5);
+            return Integer.parseInt(subStrLng);
+        }
+
+        public static double formatAsTwoDecimalPointNumber(double number, RoundingMode roundingMode) {
+            DecimalFormat df2 = new DecimalFormat("#.##");
+            df2.setRoundingMode(roundingMode);
+            return Double.parseDouble(df2.format(number));
+        }
+
+        public static double formatAsTwoDecimalPointNumber(double number) {
+            DecimalFormat df2 = new DecimalFormat("#.##");
+            df2.setRoundingMode(RoundingMode.HALF_UP);
+            return Double.parseDouble(df2.format(number));
+        }
+
+        public static double formatAsOneDecimalPointNumber(double number, RoundingMode roundingMode) {
+            DecimalFormat df2 = new DecimalFormat("#.#");
+            df2.setRoundingMode(roundingMode);
+            return Double.parseDouble(df2.format(number));
+        }
+
+        public static double formatAsOneDecimalPointNumber(double number) {
+            DecimalFormat df2 = new DecimalFormat("#.#");
+            // df2.setRoundingMode(roundingMode);
+            return Double.parseDouble(df2.format(number));
+        }
+
+        public static int formatAsZeroDecimalPointNumber(double number, RoundingMode roundingMode) {
+            DecimalFormat df2 = new DecimalFormat("#");
+            df2.setRoundingMode(roundingMode);
+            return Integer.parseInt(df2.format(number));
+        }
+
+        public static int formatAsZeroDecimalPointNumber(double number) {
+            DecimalFormat df2 = new DecimalFormat("#");
+            df2.setRoundingMode(RoundingMode.HALF_UP);
+            return Integer.parseInt(df2.format(number));
+        }
+
+        public static String convertToCurrency(double amount) {
+            NumberFormat nf = NumberFormat.getCurrencyInstance();
+            return nf.format(amount);
+        }
+
+        public static String convertToCurrency(double amount, boolean includeSymbol) {
+            String symbol = Currency.getInstance(Locale.getDefault()).getSymbol();
+            NumberFormat nf = NumberFormat.getCurrencyInstance();
+            if (includeSymbol) {
+                return nf.format(amount);
+            } else {
+                return nf.format(amount).replace(symbol, "");
+            }
+        }
+
+        public static String convertToPercentage(double value) {
+            NumberFormat numberFormat = NumberFormat.getPercentInstance();
+            numberFormat.setMaximumFractionDigits(1);
+            return numberFormat.format(value);
+        }
+
+        public static String convertToPercentage(double value, boolean includeSymbol) {
+            NumberFormat numberFormat = NumberFormat.getPercentInstance();
+            numberFormat.setMaximumFractionDigits(1);
+            if (includeSymbol) {
+                return numberFormat.format(value);
+            } else {
+                return numberFormat.format(value).replace("%","");
+            }
+        }
+
+        public static int getRandom(int low, int high) {
+            Random r = new Random();
+            int i1 = r.nextInt((high + 1) - low) + low;
+            return i1;
+        }
+
+        public static boolean isEven(int number) {
+            if ((number % 2) == 0) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
     public static class Colors {
         public static final String YELLOW = "#EFC353";
         public static final String MEDISTIM_ORANGE = "#AAF37021";
@@ -1741,6 +1943,896 @@ public class StaticHelpers {
 
         public static long convertBytesToGb(long total) {
             return total / (1024 * 1024 * 1024);
+        }
+    }
+
+    public static class DatesAndTimes {
+
+        private static final Map<String, String> DATE_FORMAT_REGEXPS = new HashMap<String, String>() {{
+            put("^\\d{8}$", "yyyyMMdd");
+            put("^\\d{1,2}-\\d{1,2}-\\d{4}$", "dd-MM-yyyy");
+            put("^\\d{4}-\\d{1,2}-\\d{1,2}$", "yyyy-MM-dd");
+            put("^\\d{1,2}/\\d{1,2}/\\d{4}$", "MM/dd/yyyy");
+            put("^\\d{4}/\\d{1,2}/\\d{1,2}$", "yyyy/MM/dd");
+            put("^\\d{1,2}\\s[a-z]{3}\\s\\d{4}$", "dd MMM yyyy");
+            put("^\\d{1,2}\\s[a-z]{4,}\\s\\d{4}$", "dd MMMM yyyy");
+            put("^\\d{12}$", "yyyyMMddHHmm");
+            put("^\\d{8}\\s\\d{4}$", "yyyyMMdd HHmm");
+            put("^\\d{1,2}-\\d{1,2}-\\d{4}\\s\\d{1,2}:\\d{2}$", "dd-MM-yyyy HH:mm");
+            put("^\\d{4}-\\d{1,2}-\\d{1,2}\\s\\d{1,2}:\\d{2}$", "yyyy-MM-dd HH:mm");
+            put("^\\d{1,2}/\\d{1,2}/\\d{4}\\s\\d{1,2}:\\d{2}$", "MM/dd/yyyy HH:mm");
+            put("^\\d{4}/\\d{1,2}/\\d{1,2}\\s\\d{1,2}:\\d{2}$", "yyyy/MM/dd HH:mm");
+            put("^\\d{1,2}\\s[a-z]{3}\\s\\d{4}\\s\\d{1,2}:\\d{2}$", "dd MMM yyyy HH:mm");
+            put("^\\d{1,2}\\s[a-z]{4,}\\s\\d{4}\\s\\d{1,2}:\\d{2}$", "dd MMMM yyyy HH:mm");
+            put("^\\d{14}$", "yyyyMMddHHmmss");
+            put("^\\d{8}\\s\\d{6}$", "yyyyMMdd HHmmss");
+            put("^\\d{1,2}-\\d{1,2}-\\d{4}\\s\\d{1,2}:\\d{2}:\\d{2}$", "dd-MM-yyyy HH:mm:ss");
+            put("^\\d{4}-\\d{1,2}-\\d{1,2}\\s\\d{1,2}:\\d{2}:\\d{2}$", "yyyy-MM-dd HH:mm:ss");
+            put("^\\d{1,2}/\\d{1,2}/\\d{4}\\s\\d{1,2}:\\d{2}:\\d{2}$", "MM/dd/yyyy HH:mm:ss");
+            put("^\\d{4}/\\d{1,2}/\\d{1,2}\\s\\d{1,2}:\\d{2}:\\d{2}$", "yyyy/MM/dd HH:mm:ss");
+            put("^\\d{1,2}\\s[a-z]{3}\\s\\d{4}\\s\\d{1,2}:\\d{2}:\\d{2}$", "dd MMM yyyy HH:mm:ss");
+            put("^\\d{1,2}\\s[a-z]{4,}\\s\\d{4}\\s\\d{1,2}:\\d{2}:\\d{2}$", "dd MMMM yyyy HH:mm:ss");
+        }};
+
+        /**
+         * Converts a Crm formatted string representing a date to a DateTime object.
+         * @param datetime The date to attempt to convert
+         * @return A DateTime object if successful, null if not.
+         */
+        public static DateTime parseCrmDateTime(String datetime) {
+            try {
+                DateTimeFormatter format = DateTimeFormat.forPattern("M/d/yyyy h:mm tt");
+                DateTime result = DateTimeFormat.forPattern("M/d/yyyy h:mm tt").parseDateTime(datetime);
+                return result;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        /**
+         * Converts a Crm formatted string representing a date to a DateTime object.
+         * @param date The date to attempt to convert
+         * @return A DateTime object if successful, null if not.
+         */
+        public static DateTime parseCrmDateOnly(String date) {
+            try {
+                DateTimeFormatter format = DateTimeFormat.forPattern("M/d/yyyy");
+                DateTime result = DateTimeFormat.forPattern("M/d/yyyy").parseDateTime(date);
+                return result;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        public static String toCrmDate(DateTime datetime) {
+            try {
+                DateTimeFormatter format = DateTimeFormat.forPattern("M/d/yyyy");
+                String result = datetime.toString(format);
+                return result;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return datetime.toLocalDateTime().toString();
+            }
+        }
+
+        /**
+         * Converts the supplied milisecond value into minutes
+         **/
+        public static float convertMilisToMinutes(double milis) {
+           return (float) (milis / 1000 / 1000) * 60;
+        }
+
+        /**
+         * Converts the current system time to UTC.
+         * @return
+         */
+        public static DateTime getCurrentUtcTime() {
+            return new DateTime(DateTime.now(), DateTimeZone.UTC);
+        }
+
+        /**
+         * Determines the system's timezone and converts the current time to it.
+         * @return
+         */
+        public static DateTime getCurrentLocalTime() {
+            return new DateTime(DateTime.now(), DateTimeZone.forID(TimeZone.getDefault().getID()));
+        }
+
+        /**
+         * Converts a UTC date/time to the device's local date/time.
+         * @return
+         */
+        public static DateTime convertUtcToLocal(DateTime utcdatetime) {
+            return new DateTime(utcdatetime, DateTimeZone.forID(TimeZone.getDefault().getID()));
+        }
+
+        /**
+         * Returns the current week of the year from 1 - 52 (e.g. 23)
+         **/
+        public static int returnDayOfYear(DateTime date) {
+
+            Calendar c = Calendar.getInstance();
+            c.setMinimalDaysInFirstWeek(7);//anything more than 1 will work in this year
+            DateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+            try {
+                c.setTime(sdf.parse(date.getDayOfMonth() + "/" + date.getMonthOfYear() + "/" + date.getYearOfCentury()));
+            } catch (ParseException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+            return c.get(Calendar.DAY_OF_YEAR);
+        }
+
+        /**
+         * Returns the current week of the year from 1 - 52 (e.g. 23)
+         **/
+        public static int returnWeekOfYear(DateTime date) {
+
+            Calendar c = Calendar.getInstance();
+            c.setMinimalDaysInFirstWeek(7);//anything more than 1 will work in this year
+            DateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+            try {
+                c.setTime(sdf.parse(date.getDayOfMonth() + "/" + date.getMonthOfYear() + "/" + date.getYearOfCentury()));
+            } catch (ParseException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+            return c.get(Calendar.WEEK_OF_YEAR);
+        }
+
+        /**
+         * Returns the current week of the year from 1 - 52 (e.g. 23)
+         **/
+        public static int returnMonthOfYear(DateTime date) {
+
+            Calendar c = Calendar.getInstance();
+            c.setMinimalDaysInFirstWeek(7);//anything more than 1 will work in this year
+            DateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+            try {
+                c.setTime(sdf.parse(date.getDayOfMonth() + "/" + date.getMonthOfYear() + "/" + date.getYearOfCentury()));
+            } catch (ParseException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+            return c.get(Calendar.MONTH);
+        }
+
+        public static int daysBetween(DateTime start, DateTime end) {
+            return Days.daysBetween(start, end).getDays();
+        }
+
+        public static int daysBetween(DateTime start) {
+            return Days.daysBetween(start, DateTime.now()).getDays();
+        }
+
+        public static String returnMonthName(int monthNumber, boolean abbreviateMonthName) {
+            String monthString = "";
+
+            switch (monthNumber) {
+                case 1:
+                    monthString = "January";
+                    break;
+                case 2:
+                    monthString = "Febuary";
+                    break;
+
+                case 3:
+                    monthString = "March";
+                    break;
+                case 4:
+                    monthString = "April";
+                    break;
+                case 5:
+                    monthString = "May";
+                    break;
+                case 6:
+                    monthString = "June";
+                    break;
+                case 7:
+                    monthString = "July";
+                    break;
+                case 8:
+                    monthString = "August";
+                    break;
+                case 9:
+                    monthString = "September";
+                    break;
+                case 10:
+                    monthString = "October";
+                    break;
+                case 11:
+                    monthString = "November";
+                    break;
+                case 12:
+                    monthString = "December";
+                    break;
+            }
+
+            if (abbreviateMonthName == true) {
+                monthString = monthString.substring(0, 3);
+            }
+
+            return monthString;
+        }
+
+        public static String getPrettyDate(DateTime now) {
+
+            String day = String.valueOf(now.getDayOfMonth());
+            String month = String.valueOf(now.getMonthOfYear());
+            String year = String.valueOf(now.getYear());
+
+            return month + "/" + day + "/" + year;
+
+        }
+
+        public static DateTime parseDate(String strDate) {
+            DateTimeFormatter df = DateTimeFormat.forPattern("M/d/yyyy h:mm a");
+            try {
+                DateTime dateTime = df.parseDateTime(strDate);
+                return dateTime;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return new DateTime();
+        }
+
+        public static String getPrettyDateAndTime(DateTime now) {
+
+            String day = String.valueOf(now.getDayOfMonth());
+            String month = String.valueOf(now.getMonthOfYear());
+            String year = String.valueOf(now.getYear());
+            String amPm = "am";
+
+            int intHour = now.getHourOfDay();
+            if (intHour == 12) {
+                amPm = "pm";
+            }
+            if (intHour > 12) {
+                intHour = intHour - 12;
+                amPm = "pm";
+            }
+            String hour = String.valueOf(intHour);
+            int intMinutes = now.getMinuteOfHour();
+            String minutes = String.valueOf(intMinutes);
+
+            switch (intMinutes) {
+                case 0:
+                    minutes = "00";
+                    break;
+                case 1:
+                    minutes = "01";
+                    break;
+                case 2:
+                    minutes = "02";
+                    break;
+                case 3:
+                    minutes = "03";
+                    break;
+                case 4:
+                    minutes = "04";
+                    break;
+                case 5:
+                    minutes = "05";
+                    break;
+                case 6:
+                    minutes = "06";
+                    break;
+                case 7:
+                    minutes = "07";
+                    break;
+                case 8:
+                    minutes = "08";
+                    break;
+                case 9:
+                    minutes = "09";
+                    break;
+            }
+
+            return month + "/" + day + "/" + year + " " + hour + ":" + minutes + " " + amPm;
+
+        }
+
+        // This method returns today's date as a short date string
+        public static String getTodaysDateAsString() {
+            Calendar c = Calendar.getInstance();
+            SimpleDateFormat df = new SimpleDateFormat("MM/dd/yyyy");
+            String formattedDate = df.format(c.getTime());
+
+            Log.d("GetTodaysDate", "Today's date is: '" + formattedDate + "'");
+
+            return formattedDate;
+        }
+
+        // This method returns yesterday's date as a short date string
+        public static String getYesterdaysDateAsString() {
+
+            // Get today as a Calendar
+            Calendar c = Calendar.getInstance();
+            SimpleDateFormat df = new SimpleDateFormat("MM/dd/yyyy");
+            // Subtract 1 day
+            c.add(Calendar.DATE, -1);
+            String formattedDate = df.format(c.getTime());
+
+            Log.d("GetYesterdaysDate", "Yesterday's date is: '" + formattedDate + "'");
+
+            return formattedDate;
+        }
+
+        // This method returns the first day of the week as a short date string
+        public static String getFirstDayOfWeek() {
+
+            // get today and clear time of day
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.HOUR_OF_DAY, 0); // ! clear would not reset the hour of
+            // day !
+            cal.clear(Calendar.MINUTE);
+            cal.clear(Calendar.SECOND);
+            cal.clear(Calendar.MILLISECOND);
+
+            // get start of this week as a formal date
+            cal.set(Calendar.DAY_OF_WEEK, cal.getFirstDayOfWeek());
+
+            // instantiate a formatter
+            SimpleDateFormat df = new SimpleDateFormat("MM/dd/yyyy");
+
+            // format the formal date
+            String formattedDate = df.format(cal.getTime());
+
+            // log the result
+            Log.d("getFirstOfWeek()", "First day of this week is: '" + formattedDate + "'");
+
+            // return the result
+            return formattedDate;
+
+        }
+
+        // This method returns the first day of the month as a short date string
+        public static String getFirstDayOfMonth() {
+
+            // get today and clear time of day
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.HOUR_OF_DAY, 0); // ! clear would not reset the hour of
+            // day !
+            cal.clear(Calendar.MINUTE);
+            cal.clear(Calendar.SECOND);
+            cal.clear(Calendar.MILLISECOND);
+
+            // get start of this week as a formal date
+            cal.set(Calendar.DAY_OF_MONTH, 1);
+
+            // instantiate a formatter
+            SimpleDateFormat df = new SimpleDateFormat("MM/dd/yyyy");
+
+            // format the formal date
+            String formattedDate = df.format(cal.getTime());
+
+            // log the result
+            Log.d("getFirstOfMonth()", "First day of this month is: '" + formattedDate + "'");
+
+            // return the result
+            return formattedDate;
+        }
+
+        public static DateTime getFirstOfYear() {
+
+            DateTime date1 = new DateTime(DateTime.now().getYear(), 1, 1, 0,0);
+            return date1;
+        }
+
+        public static DateTime getLastOfYear() {
+            return new DateTime(DateTime.now().getYear(), 12, 31, 0, 0);
+        }
+
+        public static DateTime getFirstOfMonth() {
+
+            DateTime date1 = new DateTime(DateTime.now().getYear(), DateTime.now().getMonthOfYear(), 1, 0,0);
+            return date1;
+        }
+
+        public static DateTime getLastOfMonth() {
+
+            DateTime date1 = new DateTime(DateTime.now().getYear(), DateTime.now().getMonthOfYear(),
+                    getDaysInMonth(DateTime.now().getYear(), DateTime.now().getMonthOfYear()), 0,0);
+            return date1;
+        }
+
+        public static DateTime getFirstOfYear(int year) {
+
+            DateTime date1 = new DateTime(DateTime.now().getYear(), 1, 1, 0,0);
+            return date1;
+        }
+
+        public static DateTime getLastOfYear(int year) {
+            return new DateTime(DateTime.now().getYear(), 12, 31, 0, 0);
+        }
+
+        public static DateTime getFirstOfMonth(int year, int month) {
+
+            DateTime date1 = new DateTime(year, month, 1, 0,0);
+            return date1;
+        }
+
+        public static DateTime getLastOfMonth(int year, int month) {
+
+            DateTime date1 = new DateTime(year, month, getDaysInMonth(year, month),0 ,0);
+            return date1;
+        }
+
+        public static int getDaysInMonth(int year, int month) {
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.MONTH, (month - 1));
+            cal.set(Calendar.YEAR, year);
+            cal.set(Calendar.DAY_OF_MONTH, 1);
+            int days = cal.getActualMaximum(Calendar.DAY_OF_MONTH);
+            return days; // <-- the result!
+        }
+
+        public static String getLastDayOfMonth(int month, int year) {
+            String result = "";
+            // month = month + 1; // Zero based month index
+            if (month == 0) {
+                month = 1;
+            }
+            SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
+            Date convertedDate = null;
+            String dateString = String.valueOf(month) + "/1/" + String.valueOf(year);
+            try {
+                convertedDate = dateFormat.parse(dateString);
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+            Calendar c = Calendar.getInstance();
+            c.setTime(convertedDate);
+            c.set(Calendar.DAY_OF_MONTH, c.getActualMaximum(Calendar.DAY_OF_MONTH));
+            String d, m, y;
+            d = String.valueOf(c.get(Calendar.DAY_OF_MONTH));
+            m = String.valueOf(c.get(Calendar.MONTH) + 1);
+            y = String.valueOf(c.get(Calendar.YEAR));
+            result = m + "/" + d + "/" + y;
+            return result;
+        }
+
+        /**
+         * Returns the string fullname of the requested month number
+         *
+         * @param monthNumber The month number as an int
+         * @return String value of the month number.
+         */
+        public static String getMonthName(int monthNumber) {
+            String prettyMonth = "";
+            switch (monthNumber) {
+                case 1:
+                    prettyMonth = "January ";
+                    break;
+                case 2:
+                    prettyMonth = "February ";
+                    break;
+                case 3:
+                    prettyMonth = "March ";
+                    break;
+                case 4:
+                    prettyMonth = "April ";
+                    break;
+                case 5:
+                    prettyMonth = "May ";
+                    break;
+                case 6:
+                    prettyMonth = "June ";
+                    break;
+                case 7:
+                    prettyMonth = "July ";
+                    break;
+                case 8:
+                    prettyMonth = "August ";
+                    break;
+                case 9:
+                    prettyMonth = "September ";
+                    break;
+                case 10:
+                    prettyMonth = "October ";
+                    break;
+                case 11:
+                    prettyMonth = "November ";
+                    break;
+                case 12:
+                    prettyMonth = "December ";
+                    break;
+                default:
+                    prettyMonth = "";
+                    break;
+            }
+            return prettyMonth;
+        }
+
+        public static String getPrettyDate2(DateTime dateTime) {
+            String monthName = getMonthName(dateTime.getMonthOfYear()).trim();
+            String year = Integer.toString(dateTime.getYear());
+            String day = Integer.toString(dateTime.getDayOfMonth());
+            String result = monthName + " " + day + ", " + year;
+            return result;
+        }
+
+        /**
+         * Determine SimpleDateFormat pattern matching with the given date string. Returns null if
+         * format is unknown. You can simply extend DateUtil with more formats if needed.
+         * @param dateString The date string to determine the SimpleDateFormat pattern for.
+         * @return The matching SimpleDateFormat pattern, or null if format is unknown.
+         * @see SimpleDateFormat
+         */
+        public static String determineDateFormat(String dateString) {
+            for (String regexp : DATE_FORMAT_REGEXPS.keySet()) {
+                if (dateString.toLowerCase().matches(regexp)) {
+                    return DATE_FORMAT_REGEXPS.get(regexp);
+                }
+            }
+            return null; // Unknown format.
+        }
+
+        /** Returns the seconds between two dates.  Will always be a positive float.
+         * @param createdOn The date to compare with the current date and time.
+         * @return A positive (absolute) floating point value.
+         */
+        public static float getSecondsBetween(DateTime createdOn) {
+            long nowMs = System.currentTimeMillis();
+            long thenMs = createdOn.getMillis();
+            long msInterval = Math.abs(nowMs - thenMs);
+            String strSeconds = Double.toString(msInterval / 1000);
+            return Float.parseFloat(strSeconds);
+        }
+
+        /** Returns the minutes between two dates.  Will always be a positive float.
+         * @param createdOn The date to compare with the current date and time.
+         * @return A positive (absolute) floating point value.
+         */
+        public static float getMinutesBetween(DateTime createdOn) {
+            long nowMs = DateTime.now().getMillis();
+            long thenMs = createdOn.getMillis();
+            long diff = nowMs - thenMs;
+            return convertMilisToMinutes(Math.abs(diff));
+        }
+
+        /**
+         * Returns the hours between two dates.  Will always be a positive float.
+         * @param createdOn The date to compare with the current date and time.
+         * @return A positive (absolute) floating point value.
+         */
+        public static float getHoursBetween(DateTime createdOn) {
+            long nowMs = DateTime.now().getMillis();
+            long thenMs = createdOn.getMillis();
+            float minutes = convertMilisToMinutes(Math.abs(nowMs - thenMs));
+            return minutes / 60;
+        }
+
+        /**
+         * Returns the days between two dates.  Will always be a positive float.
+         * @param createdOn The date to compare with the current date and time.
+         * @return A positive (absolute) floating point value.
+         */
+        public static float getDaysBetween(DateTime createdOn) {
+            long nowMs = DateTime.now().getMillis();
+            long thenMs = createdOn.getMillis();
+            float minutes = convertMilisToMinutes(Math.abs(nowMs - thenMs));
+            return (minutes / 60) / 24;
+        }
+    }
+
+    public static class Geo {
+        /**
+         * Returns a Location object from the supplied LatLng object.
+         * Note that only lat and lng are really populated.
+         **/
+        public static Location createLocFromLatLng(LatLng ll) {
+            Location location = new Location("");
+            location.setLatitude(ll.latitude);
+            location.setLongitude(ll.longitude);
+            location.setTime(System.currentTimeMillis());
+            location.setAccuracy(0);
+
+            return location;
+        }
+
+        public static String calculateBearing(float bearing) {
+
+            String prettyBearing = "";
+
+            if ((bearing >= 337.5 && bearing <= 360) || (bearing >= 0 && bearing < 22.5)) {
+                prettyBearing = "N";
+            }
+
+            if (bearing >= 22.5 && bearing < 67.5) {
+                prettyBearing = "NE";
+            }
+
+            if (bearing >= 67.5 && bearing < 112.5) {
+                prettyBearing = "E";
+            }
+
+            if (bearing >= 112.5 && bearing < 157.5) {
+                prettyBearing = "SE";
+            }
+
+            if (bearing >= 157.5 && bearing < 202.5) {
+                prettyBearing = "S";
+            }
+
+            if (bearing >= 202.5 && bearing < 247.5) {
+                prettyBearing = "SW";
+            }
+
+            if (bearing >= 247.5 && bearing < 292.5) {
+                prettyBearing = "W";
+            }
+
+            if (bearing >= 292.5 && bearing < 337.5) {
+                prettyBearing = "NW";
+            }
+
+            return prettyBearing;
+        }
+
+        /**
+         * Returns an integer between the values of 0 and 100 which represents a percentage.  Higher is more accurate
+         **/
+        public static int getCurrentAccAsPct(float accuracy) {
+            float a = accuracy;
+            if (a > 100f) {
+                a = 100f;
+            }
+            float d = a / 100f; // should rslt in a decimal between 0 and 1.  Higher is worse.
+            float pct = 1f - d;
+            float rslt = pct * 100;
+            int intRslt = (int) rslt;
+            return intRslt;
+        }
+
+        /**
+         * Takes the supplied meters value and converts it to either miles or kilometers.
+         * If you supply true to the appendToMakePretty parameter it will append the correct
+         * measurement unit to the end of the result (e.g. "miles" or "km"
+         **/
+        public static float convertMetersToMiles(double meters, int decimalCount) {
+
+            if (meters == 0) {
+                return 0f;
+            }
+
+            double kilometers = meters / 1000d;
+            double feet = (meters * 3.280839895d);
+            double miles = (feet / 5280d);
+
+            DecimalFormat df = new DecimalFormat("#.#");
+            df.setMaximumFractionDigits(decimalCount);
+            String result = "";
+
+            result = df.format((miles));
+
+            return Float.parseFloat(result);
+        }
+
+        /**
+         * Takes the supplied meters value and converts it to either miles or kilometers.
+         * If you supply true to the appendToMakePretty parameter it will append the correct
+         * measurement unit to the end of the result (e.g. "miles" or "km"
+         **/
+        public static float convertMilesToMeters(float miles, int decimalCount) {
+
+            float meters = (miles * 1609.34f);
+
+            DecimalFormat df = new DecimalFormat("#.#");
+            df.setMaximumFractionDigits(decimalCount);
+            String result = df.format((meters));
+
+            return Float.parseFloat(result);
+        }
+
+        /**
+         * Takes the supplied meters value and converts it to either miles or kilometers.
+         * If you supply true to the appendToMakePretty parameter it will append the correct
+         * measurement unit to the end of the result (e.g. "miles" or "km"
+         **/
+        public static String convertMetersToMiles(double meters, boolean appendToMakePretty) {
+
+            if (meters == 0) {
+                return "0";
+            }
+
+            double kilometers = meters / 1000d;
+            double feet = (meters * 3.280839895d);
+            double miles = (feet / 5280d);
+
+            DecimalFormat df = new DecimalFormat("#.#");
+            String result = "";
+
+            result = df.format((miles));
+            if (appendToMakePretty) {
+                result += " miles";
+            }
+
+            return result;
+        }
+
+        /**
+         * Takes the supplied meters value and converts it to either miles or kilometers.
+         * If you supply true to the appendToMakePretty parameter it will append the correct
+         * measurement unit to the end of the result (e.g. "miles" or "km"
+         **/
+        public static String convertMetersToFeet(double meters, Context context, boolean appendToMakePretty) {
+
+            if (meters == 0) {
+                return "0";
+            }
+
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+            String measUnit = prefs.getString("MEASUREUNIT", "IMPERIAL");
+            double feet = (meters * 3.280839895);
+            DecimalFormat df = new DecimalFormat("#.#");
+
+            String result = "";
+
+            if (measUnit.equals("IMPERIAL")) {
+                result = df.format((feet));
+                if (appendToMakePretty) {
+                    result += " feet";
+                }
+            }
+            return result;
+        }
+
+        /**
+         * Returns a speed in MPH or KPH (depends on user's settings) for the supplied meters per second value
+         * <br/><br/>
+         * Returns the value as a String in a #.# format.
+         * <br/><br/>
+         * If the user specifies true for 'appendAppropriateMetric' then either " mph" or " kph" will be appended to the back of the result.
+         **/
+        public static String getSpeedInMph(float metersPerSecond, Context appContext, boolean appendLetters,
+                                           boolean returnLotsOfDecimalPlaces) {
+
+            String rslt = "0";
+
+            try {
+                double kmPerHour = ((metersPerSecond * 3600) / 1000);
+                double milesPerHour = (metersPerSecond) / (1609.344 / 3600);
+                double feetPerSecond = (milesPerHour * 5280) / 3600;
+
+                DecimalFormat df = new DecimalFormat("#.##");
+
+                String decimalMask = "";
+
+                if (returnLotsOfDecimalPlaces) {
+                    df.setMaximumFractionDigits(8);
+                }
+
+                String mph = (df.format(milesPerHour));
+                String fps = (df.format(feetPerSecond));
+                String kph = (df.format(kmPerHour));
+                String mps = (df.format(metersPerSecond));
+
+                // Assign the mph to the value we're going to return
+                rslt = mph;
+
+                // If the user wants to append the mph value to the returned string then we oblige here
+                if (appendLetters == true) {
+                    rslt += " mph";
+                }
+            } catch (NumberFormatException e) {
+                e.printStackTrace();
+                return "0";
+            }
+
+            return rslt;
+
+        }
+
+        public static float getSpeedInMph(float metersPerSecond, boolean includeTwoDecimalPlaces) {
+            int decimalPlaces = 0;
+            if (includeTwoDecimalPlaces) decimalPlaces = 2;
+            String spdString = getSpeedInMph(metersPerSecond, false, decimalPlaces);
+            return Float.parseFloat(spdString);
+        }
+
+        public static float getSpeedInMph(float metersPerSecond, int decimals) {
+            String spdString = getSpeedInMph(metersPerSecond, false, decimals);
+            return Float.parseFloat(spdString);
+        }
+
+
+        /**
+         * Returns a speed in MPH or KPH (depends on user's settings) for the supplied meters per second value
+         * <br/><br/>
+         * Returns the value as a String in a #.# format.
+         * <br/><br/>
+         * If the user specifies true for 'appendAppropriateMetric' then either " mph" or " kph" will be appended to the back of the result.
+         **/
+        public static String getSpeedInMph(float metersPerSecond, boolean appendLetters,
+                                           int decimalPlaces) {
+            String rslt = "0";
+
+            try {
+                double kmPerHour = ((metersPerSecond * 3600) / 1000);
+                double milesPerHour = (metersPerSecond) / (1609.344 / 3600);
+                double feetPerSecond = (milesPerHour * 5280) / 3600;
+
+                DecimalFormat df = new DecimalFormat("#.##");
+
+                df.setMaximumFractionDigits(decimalPlaces);
+
+
+                String mph = (df.format(milesPerHour));
+                String fps = (df.format(feetPerSecond));
+                String kph = (df.format(kmPerHour));
+                String mps = (df.format(metersPerSecond));
+
+                // Assign the mph to the value we're going to return
+                rslt = mph;
+
+                // If the user wants to append the mph value to the returned string then we oblige here
+                if (appendLetters == true) {
+                    rslt += " mph";
+                }
+            } catch (NumberFormatException e) {
+                e.printStackTrace();
+                return "0";
+            }
+
+            return rslt;
+        }
+
+        /**
+         * Returns the supplied float meters/sec into integer miles/hr
+         *
+         * @param metersPerSecond
+         * @return
+         */
+        public static int getSpeedInMph(float metersPerSecond) {
+            double dblSpd = (metersPerSecond) / (1609.344 / 3600);
+            return (int) dblSpd;
+        }
+
+        /**
+         * Calculates the distance between two points in miles as a string
+         *
+         * @param a           Point A (LatLng)
+         * @param b           Point B (LatLng)
+         * @param appendMiles Whether or not to append, " Miles" to the end of the result
+         * @return Distance in miles (as the crow flies)
+         */
+        public static String getDistanceBetweenInMiles(Location a, Location b, boolean appendMiles) {
+            Location loc1 = new Location("");
+            loc1.setLatitude(a.getLatitude());
+            loc1.setLongitude(a.getLongitude());
+
+            Location loc2 = new Location("");
+            loc2.setLatitude(b.getLatitude());
+            loc2.setLongitude(b.getLongitude());
+
+            float distanceInMeters = loc1.distanceTo(loc2);
+
+            return convertMetersToMiles(distanceInMeters, appendMiles);
+        }
+
+        /**
+         * Calculates the distance between two points
+         *
+         * @param locA Point A (Location)
+         * @param locB Point B (Location)
+         * @return Distance in meters (as the crow flies)
+         */
+        public static float getDistanceBetweenInMeters(Location locA, Location locB) {
+            Location loc1 = new Location("");
+            loc1.setLatitude(locA.getLatitude());
+            loc1.setLongitude(locA.getLongitude());
+
+            Location loc2 = new Location("");
+            loc2.setLatitude(locB.getLatitude());
+            loc2.setLongitude(locB.getLongitude());
+
+            return loc1.distanceTo(loc2);
         }
     }
     

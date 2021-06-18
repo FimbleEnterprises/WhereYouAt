@@ -6,7 +6,7 @@ import android.os.Bundle;
 
 import com.fimbleenterprises.whereuat.MainActivity;
 import com.fimbleenterprises.whereuat.MyApp;
-import com.fimbleenterprises.whereuat.StaticHelpers;
+import com.fimbleenterprises.whereuat.helpers.StaticHelpers;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;

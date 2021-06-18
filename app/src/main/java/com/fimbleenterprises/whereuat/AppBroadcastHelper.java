@@ -1,11 +1,10 @@
 package com.fimbleenterprises.whereuat;
 
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.location.Location;
 import android.util.Log;
 
-import com.fimbleenterprises.whereuat.MyApp;
+import com.fimbleenterprises.whereuat.generic_objs.UserMessage;
 import com.fimbleenterprises.whereuat.googleuser.GoogleUser;
 import com.fimbleenterprises.whereuat.local_database.TripReport;
 
@@ -46,8 +45,8 @@ public class AppBroadcastHelper {
      */
     public enum BroadcastType {
         ACTIVE_LOCATION_SERVICE_STARTED, ACTIVE_LOCATION_SERVICE_STOPPED, PASSIVE_LOCATION_SERVICE_STOPPED,
-        PASSIVE_LOCATION_SERVICE_STARTED, SERVER_TRIP_STOPPED, SERVER_TRIP_STARTED, LOCATION_CHANGED_LOCALLY,
-        SERVER_LOCATION_UPDATED, USER_JOINED_TRIP, USER_LEFT_TRIP;
+        LOCATION_TRACKING_SERVICE_STARTED, SERVER_TRIP_STOPPED, SERVER_TRIP_STARTED, LOCATION_CHANGED_LOCALLY,
+        SERVER_LOCATION_UPDATED, USER_JOINED_TRIP, USER_LEFT_TRIP, USER_MARKER_CLICKED, MESSAGE_RECEIVED;
     }
 
     /**
@@ -91,7 +90,7 @@ public class AppBroadcastHelper {
             case ACTIVE_LOCATION_SERVICE_STOPPED:
                 // Nothing to append to broadcast
                 break;
-            case PASSIVE_LOCATION_SERVICE_STARTED:
+            case LOCATION_TRACKING_SERVICE_STARTED:
                 // Nothing to append to broadcast
                 break;
             case PASSIVE_LOCATION_SERVICE_STOPPED:
@@ -108,6 +107,12 @@ public class AppBroadcastHelper {
                 break;
             case USER_LEFT_TRIP:
                 intent.putExtra(PARCELED_EXTRA, (GoogleUser) object);
+                break;
+            case USER_MARKER_CLICKED:
+                intent.putExtra(PARCELED_EXTRA, (TripReport.MemberUpdate) object);
+                break;
+            case MESSAGE_RECEIVED:
+                // Nothing to append to broadcast
                 break;
         }
 

@@ -1,4 +1,4 @@
-package com.fimbleenterprises.whereuat.preferences;
+package com.fimbleenterprises.whereuat.helpers;
 
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;

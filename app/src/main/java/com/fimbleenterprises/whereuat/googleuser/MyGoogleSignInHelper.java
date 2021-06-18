@@ -8,7 +8,7 @@ import android.util.Log;
 import com.fimbleenterprises.whereuat.MyApp;
 import com.fimbleenterprises.whereuat.rest_api.Requests;
 import com.fimbleenterprises.whereuat.rest_api.WebApi;
-import com.fimbleenterprises.whereuat.preferences.MySettingsHelper;
+import com.fimbleenterprises.whereuat.helpers.MySettingsHelper;
 import com.fimbleenterprises.whereuat.ui.other.NotSignedInActivity;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
@@ -90,10 +90,20 @@ public class MyGoogleSignInHelper {
     public static void signOut(Context context) {
         // Build a GoogleSignInClient with the options specified by gso.
         try {
+            // Check if a trip is running and stop the services if so
+            if (MyApp.isReportingLocation()) {
+                Log.w(TAG, "signOut: | A trip is running - will stop commands to those services " +
+                        "before attempting signout.");
+                MyApp.stopAllLocationServices(true, context);
+                Log.w(TAG, "signOut: | Stop commands sent, no verification that they succeeded " +
+                        "was or will be performed however.");
+            }
+
             Log.i(TAG, "signOut Signing out the user...");
             GoogleSignInClient mGoogleSignInClient = GoogleSignIn.getClient(context, gso);
             mGoogleSignInClient.signOut();
             Log.i(TAG, "signOut User signed out.");
+
         } catch (Exception e) {
             e.printStackTrace();
         }

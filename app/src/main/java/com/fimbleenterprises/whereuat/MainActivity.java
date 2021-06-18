@@ -1,27 +1,35 @@
 package com.fimbleenterprises.whereuat;
 
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.Menu;
 import android.widget.Toast;
 
 import com.fimbleenterprises.whereuat.firebase.MyFcmHelper;
-import com.fimbleenterprises.whereuat.googleuser.GoogleUser;
+import com.fimbleenterprises.whereuat.generic_objs.UserMessage;
 import com.fimbleenterprises.whereuat.googleuser.MyGoogleSignInHelper;
-import com.fimbleenterprises.whereuat.services.ActiveLocationUpdateService;
-import com.fimbleenterprises.whereuat.services.PassiveLocationUpdateService;
+import com.fimbleenterprises.whereuat.helpers.MyNotificationManager;
+import com.fimbleenterprises.whereuat.helpers.StaticHelpers;
+// import com.fimbleenterprises.whereuat.services.ActiveLocationUpdateService;
+import com.fimbleenterprises.whereuat.local_database.TripDatasource;
+import com.fimbleenterprises.whereuat.services.LocationTrackingService;
+import com.fimbleenterprises.whereuat.ui.home.MainPager;
 import com.fimbleenterprises.whereuat.ui.other.NotSignedInActivity;
 import com.fimbleenterprises.whereuat.ui.other.PermissionsActivity;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
+
+import java.util.ArrayList;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.navigation.NavController;
+import androidx.navigation.NavDeepLinkBuilder;
 import androidx.navigation.Navigation;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
@@ -40,6 +48,7 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
     // conditions are not met.
     public static boolean shouldShowSignIn = true;
     public static boolean shouldRequestPermissions = true;
+    public DrawerLayout drawer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +72,7 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
 
 
         // Add a reference to the drawer and use this activity as the listener (implements DrawerListener)
-        DrawerLayout drawer = findViewById(R.id.drawer_layout);
+        drawer = findViewById(R.id.drawer_layout);
         drawer.addDrawerListener(this);
 
         // Fuck this nav view.  I just don't get it!  Shit works but don't fuck with it or it may stop working!
@@ -76,9 +85,77 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
 
+        // Check if we are here due to the user clicking the new message received notification
+        if (getIntent() != null &&
+            getIntent().getAction() != null &&
+            getIntent().getAction().equals(MyNotificationManager.IS_MESSAGE) &&
+            getIntent().hasExtra(MyNotificationManager.IS_MESSAGE)) {
+            Log.w(TAG, "onCreate | User clicked a message received notificatioN!");
+
+            // Grab the messages from the database - the new message was written to the db by the
+            // FcmReceiver when it received the FCM so it will be there.
+            TripDatasource ds = new TripDatasource();
+            ArrayList<UserMessage> msgs = ds.getAllUserMessages(MyApp.getCurrentTripcode());
+
+            // Send a global broadcast in case the user had the app open when they clicked the notification.
+            // The broadcast receivers won't be registered if it was in the background so this won't
+            // ever be heard - but if it was in the foreground we can use this broadcast to move pages.
+            AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType.MESSAGE_RECEIVED);
+
+            // Logging because who doesn't love spamming LogCat?
+            Log.i(TAG, "onCreate Get all user msgs for tripcode | " + msgs.size() + " items.");
+
+            // Set this global flag.  It is sort of hacky but this will be how the MainPager class
+            // will know to move to the messages page after it loads up.  For the record,
+            // it will get reset to false when the Frag_Messages' OnCreateView(...) method is called.
+            // I have commented where this flag is evaluated in the MainPager class if you want more
+            // details (all this fuckery cost me a full half day and resulted in this stupid flag).
+            MyApp.setNewMessagePending(true);
+        }
+
     }
 
     // region OTHER OVERRIDES
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            Log.w(TAG, " !!!!!!! -= onKeyDown | BACK PRESS DETECTED AT MAINACTIVITY =- !!!!!!!");
+
+            // If the drawer is open we always close it, call it a day, and do no more.
+            if (drawer.isOpen()) {
+                Log.i(TAG, "onKeyDown | Drawer is open so back press will close it and do no more.");
+                drawer.close();
+                return true;
+            }
+
+            // Check if a trip is running
+            if (MyApp.isReportingLocation()) {
+                switch (MainPager.mViewPager.getCurrentItem()) {
+                    case MainPager.SectionsPagerAdapter.JOIN_CREATE:
+                        finish();
+                        break;
+                    case MainPager.SectionsPagerAdapter.VIEW_MEMBERS:
+                        MainPager.mViewPager.setCurrentItem(MainPager.SectionsPagerAdapter.JOIN_CREATE);
+                        break;
+                    case MainPager.SectionsPagerAdapter.VIEW_MAP:
+                        MainPager.mViewPager.setCurrentItem(MainPager.SectionsPagerAdapter.VIEW_MEMBERS);
+                        break;
+                }
+            } else {
+                if (MainPager.mViewPager.getCurrentItem() == MainPager.SectionsPagerAdapter.JOIN_CREATE) {
+                    finish();
+                } else {
+                    MainPager.mViewPager.setCurrentItem(MainPager.SectionsPagerAdapter.JOIN_CREATE);
+                }
+            }
+
+            return true;
+        }
+
+        return false;
+    }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
@@ -113,7 +190,7 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
 
             Log.w(TAG, "onPause | App is pausing.  Will kill the active service and start the passive service...");
 
-            if (ActiveLocationUpdateService.isRunning) {
+            /*if (ActiveLocationUpdateService.isRunning) {
                 // Stop the active service
                 Intent stopIntent = new Intent(this, ActiveLocationUpdateService.class);
                 stopIntent.putExtra(ActiveLocationUpdateService.SWITCH_TO_PASSIVE_SERVICE, true);
@@ -123,7 +200,7 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
                 Intent stopIntent = new Intent(this, PassiveLocationUpdateService.class);
                 stopIntent.putExtra(PassiveLocationUpdateService.SWITCH_TO_ACTIVE_SERVICE, true);
                 startForegroundService(stopIntent);
-            }
+            }*/
 
         }
 
@@ -193,14 +270,14 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
             }
         });
 
-        // If a trip is running, stop the passive location service and switch to the active one.
+        /*// If a trip is running, stop the passive location service and switch to the active one.
         if (MyApp.isReportingLocation()) {
             Log.i(TAG, "onResume | Requesting the passive be stopped and the active be started!");
 
-            Intent stopPassiveIntent = new Intent(this, PassiveLocationUpdateService.class);
-            stopPassiveIntent.putExtra(PassiveLocationUpdateService.SWITCH_TO_ACTIVE_SERVICE, true);
+            Intent stopPassiveIntent = new Intent(this, LocationTrackingService.class);
+            stopPassiveIntent.putExtra(LocationTrackingService.SWITCH_TO_ACTIVE_SERVICE, true);
             startService(stopPassiveIntent);
-        }
+        }*/
 
     }
 

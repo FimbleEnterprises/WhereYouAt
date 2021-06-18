@@ -19,7 +19,7 @@ public class LocalUserLocation {
     public double lon;
     public long datetime;
     public String provider;
-    public float accuracty;
+    public float accuracy;
 
     public LocalUserLocation() { }
 
@@ -28,7 +28,7 @@ public class LocalUserLocation {
         this.lat = location.getLatitude();
         this.lon = location.getLongitude();
         this.provider = location.getProvider();
-        this.accuracty = location.getAccuracy();
+        this.accuracy = location.getAccuracy();
     }
 
     /**
@@ -55,7 +55,7 @@ public class LocalUserLocation {
                 this.id = c.getInt(id_Index);
                 this.lat = c.getDouble(lat_Index);
                 this.lon = c.getDouble(lon_Index);
-                this.accuracty = c.getFloat(acc_Index);
+                this.accuracy = c.getFloat(acc_Index);
                 this.provider = c.getString(provider_Index);
                 this.datetime = c.getLong(datetime_Index);
 
@@ -64,6 +64,54 @@ public class LocalUserLocation {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Returns the distance, in meters, to the specified place.
+     * @param position A LatLng object
+     * @return The distance, as the crow flies, between the two points in meters.
+     */
+    public float distanceTo(LatLng position) {
+        Location loc = new Location("LOGICAL");
+        loc.setLatitude(position.latitude);
+        loc.setLongitude(position.longitude);
+
+        return loc.distanceTo(this.toCrudeLocation());
+    }
+
+    /**
+     * Returns the distance, in meters, to the specified place.
+     * @param position A Location object
+     * @return The distance, as the crow flies, between the two points in meters.
+     */
+    public float distanceTo(Location position) {
+
+        return position.distanceTo(this.toCrudeLocation());
+    }
+
+    /**
+     * Returns the distance, in meters, to the specified place.
+     * @param position A LatLng object
+     * @return The distance, as the crow flies, between the two points in meters.
+     */
+    public float distanceTo(TripReport.MemberUpdate position) {
+        Location loc = new Location("LOGICAL");
+        loc.setLatitude(position.lat);
+        loc.setLongitude(position.lon);
+
+        return loc.distanceTo(this.toCrudeLocation());
+    }
+
+    /**
+     * Creates a bare bones location object that has only lat/lon and accuracy values.
+     * @return A very basic Location object.
+     */
+    public Location toCrudeLocation() {
+        Location location = new Location("LOGICAL");
+        location.setLongitude(this.lon);
+        location.setLatitude(this.lat);
+        location.setAccuracy(this.accuracy);
+        return location;
     }
 
     public LatLng toLatLng() {

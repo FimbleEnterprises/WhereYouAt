@@ -1,32 +1,42 @@
 package com.fimbleenterprises.whereuat.ui.home;
 
-import android.animation.FloatEvaluator;
-import android.animation.PropertyValuesHolder;
-import android.animation.ValueAnimator;
+import android.Manifest;
+import android.app.Dialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.location.Location;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Debug;
 import android.os.Handler;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.ViewTreeObserver;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentPagerAdapter;
@@ -40,17 +50,26 @@ import com.fimbleenterprises.whereuat.MainActivity;
 import com.fimbleenterprises.whereuat.MyApp;
 import com.fimbleenterprises.whereuat.MyProgressDialog;
 import com.fimbleenterprises.whereuat.MyViewPager;
+import com.fimbleenterprises.whereuat.NonScrollRecyclerView;
 import com.fimbleenterprises.whereuat.R;
-import com.fimbleenterprises.whereuat.adapters.BasicObjectsAdapter;
-import com.fimbleenterprises.whereuat.generic_objs.BasicObjects;
+import com.fimbleenterprises.whereuat.adapters.MemberListAdapter;
+import com.fimbleenterprises.whereuat.adapters.UserMessagesAdapter;
+import com.fimbleenterprises.whereuat.generic_objs.MessageDialog;
+import com.fimbleenterprises.whereuat.generic_objs.MyMapMarkers;
+import com.fimbleenterprises.whereuat.generic_objs.UserMessage;
 import com.fimbleenterprises.whereuat.googleuser.GoogleUser;
+import com.fimbleenterprises.whereuat.helpers.KeyboardHelper;
+import com.fimbleenterprises.whereuat.helpers.MyNotificationManager;
+import com.fimbleenterprises.whereuat.helpers.StaticHelpers;
 import com.fimbleenterprises.whereuat.local_database.TripDatasource;
 import com.fimbleenterprises.whereuat.local_database.TripReport;
 import com.fimbleenterprises.whereuat.rest_api.Requests;
 import com.fimbleenterprises.whereuat.rest_api.WebApi;
-import com.fimbleenterprises.whereuat.services.ActiveLocationUpdateService;
+// import com.fimbleenterprises.whereuat.services.ActiveLocationUpdateService;
 import com.fimbleenterprises.whereuat.AppBroadcastHelper;
-import com.fimbleenterprises.whereuat.services.PassiveLocationUpdateService;
+import com.fimbleenterprises.whereuat.services.LocationTrackingService;
+import com.google.android.gms.common.api.Api;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -58,16 +77,24 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.GroundOverlay;
 import com.google.android.gms.maps.model.GroundOverlayOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PointOfInterest;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.scwang.smart.refresh.header.MaterialHeader;
+import com.scwang.smart.refresh.layout.SmartRefreshLayout;
+import com.scwang.smart.refresh.layout.api.RefreshLayout;
+import com.scwang.smart.refresh.layout.listener.OnRefreshListener;
 
 import java.util.ArrayList;
-
-import javax.sql.DataSource;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 // This is effectively the application's HOME view - 90% of the app will be in this file!
@@ -83,7 +110,7 @@ import javax.sql.DataSource;
 // 10 - May - 2021
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-public class MainPager extends Fragment {
+public class MainPager extends Fragment implements OnSuccessListener<LocationResult> {
 
     private static final String TAG = "HomeFragment";
     public static int curPageIndex = 0;
@@ -95,12 +122,13 @@ public class MainPager extends Fragment {
     public static PagerTitleStrip mPagerStrip;
     public static SectionsPagerAdapter sectionsPagerAdapter;
     BroadcastReceiver mainAppRootFragmentReceiver;
+    public static ArrayList<TripReport.MemberUpdate> cachedAvatars = new ArrayList<>();
 
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
         Log.i(TAG, " !!!!!!! -= onCreateView  =- !!!!!!!");
 
-
+        // new TripDatasource().deleteAllLocalMessages("0000");
 
         homeViewModel =
                 ViewModelProviders.of(this).get(HomeViewModel.class);
@@ -118,7 +146,7 @@ public class MainPager extends Fragment {
         mViewPager.setAdapter(sectionsPagerAdapter);
         mViewPager.setOffscreenPageLimit(0);
         mViewPager.setCurrentItem(0);
-        mViewPager.setPageCount(2);
+        mViewPager.setPageCount(4);
         mViewPager.addOnPageChangeChangedListener(new MyViewPager.MyPageChangedListener() {
             @Override
             public void onPageChanged(@Nullable Intent intent) {
@@ -158,16 +186,26 @@ public class MainPager extends Fragment {
                 // various objects depending on the aforementioned type (e.g. a Location object
                 // if the type is LOCATION_CHANGED_LOCALLY or a TripReport object on type
                 // SERVER_LOCATION_UPDATED).
-                AppBroadcastHelper.BroadcastType type = (AppBroadcastHelper.BroadcastType)
-                        intent.getSerializableExtra(AppBroadcastHelper.BROADCAST_TYPE);
+                AppBroadcastHelper.BroadcastType type = null;
 
-                Log.i(TAG, "onReceive | BroadcastType: " + type.name());
-                Log.i(TAG, "onReceive | Has PARCELLED_EXTRA: " + intent.hasExtra(AppBroadcastHelper.PARCELED_EXTRA));
+                try {
+                    type = (AppBroadcastHelper.BroadcastType)
+                            intent.getSerializableExtra(AppBroadcastHelper.BROADCAST_TYPE);
+                    Log.i(TAG, "onReceive | BroadcastType: " + type.name());
+                    Log.i(TAG, "onReceive | Has PARCELLED_EXTRA: " + intent.hasExtra(AppBroadcastHelper.PARCELED_EXTRA));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                if (type == null) {
+                    return;
+                }
 
                 switch (type) {
                     case ACTIVE_LOCATION_SERVICE_STARTED:
-                        txtStatus.setText("Actively monitoring");
+                        txtStatus.setText("Actively monitoring - " + MyApp.getCurrentTripcode());
                         Log.i(TAG, "onReceive | Active location start broadcast");
+                        mViewPager.setCurrentItem(SectionsPagerAdapter.VIEW_MEMBERS);
                         break;
                     case ACTIVE_LOCATION_SERVICE_STOPPED:
                         Log.i(TAG, "onReceive | Active location stop broadcast");
@@ -175,8 +213,8 @@ public class MainPager extends Fragment {
                             txtStatus.setText("Not currently monitoring");
                         }
                         break;
-                    case PASSIVE_LOCATION_SERVICE_STARTED:
-                        txtStatus.setText("Passively monitoring");
+                    case LOCATION_TRACKING_SERVICE_STARTED:
+                        txtStatus.setText("Passively monitoring - " + MyApp.getCurrentTripcode());
                         Log.i(TAG, "onReceive | Passive location start broadcast");
                         break;
                     case PASSIVE_LOCATION_SERVICE_STOPPED:
@@ -209,10 +247,45 @@ public class MainPager extends Fragment {
                     case USER_JOINED_TRIP:
 
                         break;
+                    case MESSAGE_RECEIVED:
+                        // Toast.makeText(context, "Should go to the messages frag!", Toast.LENGTH_SHORT).show();
+                        mViewPager.setCurrentItem(SectionsPagerAdapter.VIEW_MESSAGES, true);
+                        break;
                 }
 
             }
         };
+
+        // Check if a trip is already in progress - if so take the user to the map page
+        //
+        // EDIT (9/Jun/21):
+        // Okay, so this needs a de;aued handler in order to work consistently.  I think I could even
+        // get away without a delay but regardless, if I try to directly set the mViewPager's
+        // page from here in onCreateView (what a sane person would assume to be a good and
+        // proper way and place) it will just not work. It is probably being called before the
+        // pager's adapter is actually set or something else lifecycle-related.
+        //
+        // Honestly, I would love to be able to add an intent extra to the notification click to take
+        // the user to the messages page to view the new message they received but I cannot figure out
+        // how.  So a yucky global variable is used instead.  But I digress, YOU NEED THIS HANDLER OR
+        // SHIT WON'T CHANGE PAGES!
+        if(MyApp.isNewMessagePending()) {
+            Log.i(TAG, "onCreateView A new message is awaiting our eager eyes!");
+            Handler handler = new Handler();
+            Runnable runner = new Runnable() {
+                @Override
+                public void run() {
+                    mViewPager.setCurrentItem(3);
+                }
+            };
+            handler.postDelayed(runner, 10);
+        // END HACK TO MAKE PAGE CHANGE TO VIEW NEW MESSAGE
+
+        } else if (MyApp.isReportingLocation()) {
+            mViewPager.setCurrentItem(SectionsPagerAdapter.VIEW_MAP);
+        } else {
+            mViewPager.setCurrentItem(SectionsPagerAdapter.JOIN_CREATE);
+        }
 
         return root;
     }
@@ -245,14 +318,13 @@ public class MainPager extends Fragment {
         getServiceStatus();
     }
 
+
+
     void getServiceStatus() {
         if (MyApp.isReportingLocation()) {
-            if (PassiveLocationUpdateService.isRunning) {
+            if (LocationTrackingService.isRunning) {
                 txtStatus.setText("Passively tracking your location");
                 Log.i(TAG, "getServiceStatus | passive");
-            } else if(ActiveLocationUpdateService.isRunning) {
-                txtStatus.setText("Actively tracking your location");
-                Log.i(TAG, "getServiceStatus | active");
             } else {
                 txtStatus.setText("In a group but no services started?");
                 Log.i(TAG, "getServiceStatus | no service?");
@@ -261,6 +333,11 @@ public class MainPager extends Fragment {
             txtStatus.setText("Not in a group");
             Log.i(TAG, "getServiceStatus | no group");
         }
+    }
+
+    @Override
+    public void onSuccess(LocationResult locationResult) {
+
     }
 
     //region ****************************** PAGER FRAGS *****************************************
@@ -272,6 +349,9 @@ public class MainPager extends Fragment {
 
         // A receiver for catching app-wide broadcasts sent from a variety of different code locations.
         BroadcastReceiver mainAppReceiver;
+
+        // Onscreen keyboard reference.
+        InputMethodManager imm;
 
         Button btnJoin;
         Button btnCreate;
@@ -293,56 +373,63 @@ public class MainPager extends Fragment {
             btnJoin.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
+                    final Dialog dialog = new Dialog(getContext());
+                    final Context c = getContext();
+                    dialog.setContentView(R.layout.dialog_enter_trip_code);
+                    dialog.setCancelable(true);
+                    final EditText txtTripCode = dialog.findViewById(R.id.txtTripCode);
+                    Button btnJoin = dialog.findViewById(R.id.btnDialogJoinTrip);
 
-                    final MyProgressDialog dg = new MyProgressDialog(getContext(), "Joining group...");
-                    dg.show();
-
-                    WebApi api = new WebApi(getContext());
-                    Requests.Request request = new Requests.Request(Requests.Request.Function.JOIN_TRIP);
-                    request.arguments.add(new Requests.Arguments.Argument("userid", GoogleUser.getCachedUser().id));
-                    request.arguments.add(new Requests.Arguments.Argument("tripcode", "0000"));
-                    api.makeRequest(request, new WebApi.WebApiResultListener() {
+                    btnJoin.setOnClickListener(new View.OnClickListener() {
                         @Override
-                        public void onSuccess(WebApi.OperationResults results) {
-                            if (results.list.get(0).wasSuccessful) {
-
-                                // Get the new, current trip report as reported by the server just now
-                                TripReport tripReport = new TripReport(results.list.get(0).result);
-
-                                // Clear the existing local db completely!
-                                TripDatasource ds = new TripDatasource();
-
-                                boolean delResult = ds.deleteMemberUpdatesByTripcode(tripReport.tripcode);
-                                Log.w(TAG, "onClick: DELETED ALL EXISTING LOCAL UPDATES FOR TRIPCODE: "
-                                        + tripReport + " | Result: " + delResult);
-
-                                Log.i(TAG, "onSuccess | " + results.list.size() + " results");
-
-                                // Save the new, current trip report to the server.
-                                tripReport.saveToLocalDb();
-
-                                // Start the service up - we inna trip!
-                                String tripcode = tripReport.tripcode;
-                                Intent startServiceIntent = new Intent(getContext(), ActiveLocationUpdateService.class);
-                                startServiceIntent.putExtra(ActiveLocationUpdateService.TRIPCODE, tripcode);
-                                getContext().startForegroundService(startServiceIntent);
-
+                        public void onClick(View view) {
+                            String code = txtTripCode.getText().toString();
+                            if (code != null && code.length() > 3) {
+                                joinTrip(code);
+                                dialog.dismiss();
+                            } else {
+                                Toast.makeText(getContext(), "Please enter a valid trip code", Toast.LENGTH_SHORT).show();
                             }
-                            dg.dismiss();
-                        }
-
-                        @Override
-                        public void onFailure(String message) {
-                            Log.w(TAG, " !!!!!!! -= onFailure | " + message + " =- !!!!!!!");
-                            dg.dismiss();
                         }
                     });
+
+                    dialog.setOnKeyListener(new DialogInterface.OnKeyListener() {
+                        @Override
+                        public boolean onKey(DialogInterface dialog, int keyCode, KeyEvent event) {
+                            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                                dialog.dismiss();
+                                return true;
+                            } else {
+                                return false;
+                            }
+                        }
+                    });
+
+                    dialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
+                        @Override
+                        public void onCancel(DialogInterface dialogInterface) {
+                            KeyboardHelper keyboardHelper = new KeyboardHelper(getContext());
+                            keyboardHelper.hideSoftKeyboard(txtTripCode);
+                        }
+                    });
+
+                    dialog.show();
+                    KeyboardHelper keyboardHelper = new KeyboardHelper(getContext());
+                    keyboardHelper.showSoftKeyboard(txtTripCode);
                 }
             });
 
             btnCreate.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
+                    MyNotificationManager notificationManager = new MyNotificationManager();
+                    Log.i(TAG, "onClick | Low channel: " + notificationManager.lowPriorityChannelExists());
+                    Log.i(TAG, "onClick | High channel: " + notificationManager.highPriorityChannelExists());
+
+                    // notificationManager.showHighPriorityNotification();
+                    notificationManager.showLowPriorityNotification();
+
+                    createTrip();
 
                 }
             });
@@ -350,10 +437,40 @@ public class MainPager extends Fragment {
             btnLeave.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
+
+                    // Dialog because we're classy like that.
+                    final MyProgressDialog dg = new MyProgressDialog(getContext(), "Leaving group...");
+                    dg.show();
+
                     // Send stop intents to both active and passive services - though only the active
                     // service should be running whenever this method is called.  Sending stops to both
                     // anyway
                     MyApp.stopAllLocationServices();
+
+                    // Send a request to the server to remove the user's entries from the TripEntries
+                    // table.  This will also send an FCM to all members with the user's GoogleUser object as the obj
+                    // property of the payload.
+                    WebApi api = new WebApi(getContext());
+                    Requests.Request request = new Requests.Request(Requests.Request.Function.LEAVE_TRIP);
+                    request.arguments.add(new Requests.Arguments.Argument("userid", GoogleUser.getCachedUser().id));
+                    request.arguments.add(new Requests.Arguments.Argument("tripcode", "0000"));
+                    api.makeRequest(request, new WebApi.WebApiResultListener() {
+                        @Override
+                        public void onSuccess(WebApi.OperationResults results) {
+                            if (results.list.get(0).wasSuccessful) {
+                                Toast.makeText(getContext(), "You have left the group!", Toast.LENGTH_SHORT).show();
+                            }
+                            dg.dismiss();
+                            sectionsPagerAdapter.setItemCount();
+                        }
+
+                        @Override
+                        public void onFailure(String message) {
+                            Log.w(TAG, " !!!!!!! -= onFailure | " + message + " =- !!!!!!!");
+                            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+                            dg.dismiss();
+                        }
+                    });
                 }
             });
 
@@ -379,7 +496,7 @@ public class MainPager extends Fragment {
                         case ACTIVE_LOCATION_SERVICE_STOPPED:
 
                             break;
-                        case PASSIVE_LOCATION_SERVICE_STARTED:
+                        case LOCATION_TRACKING_SERVICE_STARTED:
 
                             break;
                         case PASSIVE_LOCATION_SERVICE_STOPPED:
@@ -391,6 +508,9 @@ public class MainPager extends Fragment {
                                 Log.i(TAG, "onReceive | Extra is of type: Location!\nLocal loc | Lat: " + localLoc.getLatitude()
                                         + " Lon: " + localLoc.getLongitude() + " Acc: " +
                                         localLoc.getAccuracy() + " meters");
+
+                                // mViewPager.setCurrentItem(1);
+
                             } catch (Exception e) {
                                 e.printStackTrace();
                             }
@@ -418,6 +538,8 @@ public class MainPager extends Fragment {
 
                 }
             };
+
+            getParentFragmentManager().popBackStack();
 
             return root;
         }
@@ -449,8 +571,11 @@ public class MainPager extends Fragment {
 
         @Override
         public void onResume() {
-            Log.i(TAG, " !!!!!!! -= onResume  =- !!!!!!!");
+            Log.i(TAG, " !!!!!!! -= onResume =- !!!!!!!");
             updateUI();
+
+            sectionsPagerAdapter.setItemCount(MyApp.isReportingLocation() ? 4 : 1);
+
             super.onResume();
         }
 
@@ -458,6 +583,103 @@ public class MainPager extends Fragment {
         public void onPause() {
             Log.i(TAG, " !!!!!!! -= onPause  =- !!!!!!!");
             super.onPause();
+        }
+
+        void joinTrip(String tripcode) {
+            final MyProgressDialog dg = new MyProgressDialog(getContext(), "Joining group...");
+            dg.show();
+
+            WebApi api = new WebApi(getContext());
+            Requests.Request request = new Requests.Request(Requests.Request.Function.JOIN_TRIP);
+            request.arguments.add(new Requests.Arguments.Argument("userid", GoogleUser.getCachedUser().id));
+            request.arguments.add(new Requests.Arguments.Argument("tripcode", tripcode));
+            api.makeRequest(request, new WebApi.WebApiResultListener() {
+                @Override
+                public void onSuccess(WebApi.OperationResults results) {
+                    if (results.list.get(0).wasSuccessful) {
+
+                        // Get the new, current trip report as reported by the server just now
+                        TripReport tripReport = new TripReport(results.list.get(0).result);
+
+                        // Clear the existing local db completely!
+                        TripDatasource ds = new TripDatasource();
+
+                        boolean delResult = ds.deleteMemberUpdatesByTripcode(tripReport.tripcode);
+                        Log.w(TAG, "onClick: DELET.ED ALL EXISTING LOCAL UPDATES FOR TRIPCODE: "
+                                + tripReport + " | Result: " + delResult);
+
+                        Log.i(TAG, "onSuccess | " + results.list.size() + " results");
+
+                        // Save the new, current trip report to the server.
+                        tripReport.saveToLocalDb();
+
+                        // Start the service up - we inna trip!
+                        String tripcode = tripReport.tripcode;
+                        Intent startServiceIntent = new Intent(getContext(), LocationTrackingService.class);
+                        startServiceIntent.putExtra(LocationTrackingService.TRIPCODE, tripcode);
+                        getContext().startForegroundService(startServiceIntent);
+
+                        sectionsPagerAdapter.setItemCount(4);
+                        mViewPager.setCurrentItem(2);
+
+                    } else {
+                        if (results.list.get(0).operationSummary.equals(WebApi.OperationResults.ERROR_TRIP_NOT_FOUND)) {
+                            Toast.makeText(getContext(), "Trip code not found!", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                    dg.dismiss();
+                }
+
+                @Override
+                public void onFailure(String message) {
+                    Log.w(TAG, " !!!!!!! -= onFailure | " + message + " =- !!!!!!!");
+                    dg.dismiss();
+                }
+            });
+        }
+
+        void createTrip() {
+            final MyProgressDialog dg = new MyProgressDialog(getContext(), "Joining group...");
+            dg.show();
+
+            WebApi api = new WebApi(getContext());
+            Requests.Request request = new Requests.Request(Requests.Request.Function.CREATE_NEW_TRIP);
+            request.arguments.add(new Requests.Arguments.Argument("userid", GoogleUser.getCachedUser().id));
+            api.makeRequest(request, new WebApi.WebApiResultListener() {
+                @Override
+                public void onSuccess(WebApi.OperationResults results) {
+                    if (results.list.get(0).wasSuccessful) {
+
+                        Log.i(TAG, "onSuccess ");
+
+                        TripReport tripReport = new TripReport(results.list.get(0).result);
+                        // Save the new, current trip report to the server.
+                        tripReport.saveToLocalDb();
+
+                        // Start the service up - we inna trip!
+                        String tripcode = tripReport.tripcode;
+                        Intent startServiceIntent = new Intent(getContext(), LocationTrackingService.class);
+                        startServiceIntent.putExtra(LocationTrackingService.TRIPCODE, tripcode);
+                        getContext().startForegroundService(startServiceIntent);
+
+                        sectionsPagerAdapter.setItemCount(4);
+                        mViewPager.setCurrentItem(2);
+
+
+                    } else {
+                        if (results.list.get(0).operationSummary.equals(WebApi.OperationResults.ERROR_TRIP_NOT_FOUND)) {
+                            Toast.makeText(getContext(), "Trip code not found!", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                    dg.dismiss();
+                }
+
+                @Override
+                public void onFailure(String message) {
+                    Log.w(TAG, " !!!!!!! -= onFailure | " + message + " =- !!!!!!!");
+                    dg.dismiss();
+                }
+            });
         }
 
         void updateUI() {
@@ -468,18 +690,20 @@ public class MainPager extends Fragment {
     }
 
     public static class Frag_ViewMembers extends Fragment
-                                         implements
-                                                 BasicObjectsAdapter.OnBasicObjectClickListener,
-                                                 BasicObjectsAdapter.OnBasicObjectLongClickListener {
+            implements
+            MemberListAdapter.OnMemberClickListener,
+            MemberListAdapter.OnMemberLongClickListener,
+            OnRefreshListener {
 
         private static final String TAG = "Frag_ViewMembers";
         public static final String ARG_SECTION_NUMBER = "section_number";
         public TextView txtNotInTrip;
         public View root;
-        RecyclerView rvMembers;
-        BasicObjectsAdapter adapter;
+        SmartRefreshLayout refreshLayout;
+        MemberListAdapter adapter;
+        NonScrollRecyclerView recyclerView;
         BroadcastReceiver mainAppReceiver;
-        BasicObjects data = new BasicObjects();
+        BroadcastReceiver pageChangedToThisReceiver;
 
         @Nullable
         @Override
@@ -491,7 +715,12 @@ public class MainPager extends Fragment {
             root = inflater.inflate(R.layout.frag_trip_members, container, false);
             super.onCreateView(inflater, container, savedInstanceState);
 
-            rvMembers = root.findViewById(R.id.rvMembers);
+            refreshLayout = root.findViewById(R.id.refreshLayout);
+            refreshLayout.setOnRefreshListener(this);
+            refreshLayout.setEnableRefresh(true);
+            refreshLayout.setRefreshHeader(new MaterialHeader(getContext()));
+
+            recyclerView = root.findViewById(R.id.recyclerView);
             txtNotInTrip = root.findViewById(R.id.txtNotInTrip);
             txtNotInTrip.setVisibility(MyApp.isReportingLocation() ? View.GONE : View.VISIBLE);
 
@@ -533,6 +762,25 @@ public class MainPager extends Fragment {
                 }
             };
 
+            pageChangedToThisReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent != null && intent.getAction() != null) {
+                        if (intent.getAction().equals(Frag_Map.SELECTED_MEMBER)) {
+                            String selectedUserid = intent.getStringExtra(Frag_Map.SELECTED_MEMBER);
+                            if (selectedUserid != null) {
+                                Log.i(TAG, "onReceive | User selected a map marker and now we're here!");
+
+                                adapter.highlightUser(selectedUserid);
+
+                            }
+                        }
+                    }
+                }
+            };
+
+            recyclerView = root.findViewById(R.id.recyclerView);
+
             buildList();
 
             return root;
@@ -543,6 +791,7 @@ public class MainPager extends Fragment {
             super.onPause();
 
             getContext().unregisterReceiver(mainAppReceiver);
+            getContext().unregisterReceiver(pageChangedToThisReceiver);
 
         }
 
@@ -552,12 +801,15 @@ public class MainPager extends Fragment {
 
             Log.i(TAG, "onResume | Registered the main app receiver");
             getContext().registerReceiver(mainAppReceiver, new IntentFilter(AppBroadcastHelper.GLOBAL_BROADCAST));
+
             buildList();
+
+            getContext().registerReceiver(pageChangedToThisReceiver, new IntentFilter(Frag_Map.SELECTED_MEMBER));
 
         }
 
         void destroyList() {
-            rvMembers.setAdapter(null);
+            recyclerView.setAdapter(null);
             txtNotInTrip.setText("Not in a group");
             txtNotInTrip.setVisibility(View.VISIBLE);
         }
@@ -571,66 +823,125 @@ public class MainPager extends Fragment {
 
             txtNotInTrip.setVisibility(View.GONE);
 
-            ArrayList<TripReport> rawData = new TripDatasource().getLastXmemberUpdates(1, MyApp.getCurrentTripcode());
-            data = new BasicObjects();
-
-            if (rawData == null || rawData.size() == 0) {
-                return;
+            if (refreshLayout != null) {
+                refreshLayout.autoRefresh();
             }
 
-            for (TripReport report : rawData) {
-                for (TripReport.MemberUpdate update : report.list) {
-                    BasicObjects.BasicObject object = new BasicObjects.BasicObject();
-                    object.isSeparator = false;
-                    object.title = "Name: " + update.displayName;
-                    object.subtitle = "Location type: " + update.locationtype;
-                    object.obj = update;
-                    data.list.add(object);
-                }
+            // Always get the latest data from the db
+            ArrayList<TripReport> reports = new TripDatasource().getLastXmemberUpdates(1, MyApp.getCurrentTripcode());
+            TripReport report = reports.get(0);
+
+            // Calculate distances if there is an available last known location.
+            if (MyApp.getLastKnownLocation() != null) {
+                report.calculateMemberDistances(MyApp.getLastKnownLocation());
             }
 
-            // This line is needed because reasons
-            rvMembers.setLayoutManager(new LinearLayoutManager(getContext()));
+            if (adapter == null) {
+                adapter = new MemberListAdapter(getContext(), report);
+                adapter.setClickListener(this);
+                adapter.setLongClickListener(this);
+                adapter.setSendMessageClickListener(new MemberListAdapter.OnSendMessageClickListener() {
+                    @Override
+                    public void onClick(TripReport.MemberUpdate memberUpdate) {
+                        MessageDialog msgDialog = new MessageDialog(getContext(), new MessageDialog.MessageSubmitResultListener() {
+                            @Override
+                            public void onSuccess() {
+                                Intent intent = new Intent(Frag_ViewMessages.SENT_MESSAGE);
+                                mViewPager.setCurrentItem(SectionsPagerAdapter.VIEW_MESSAGES, intent);
+                            }
 
-            // Create an adapter for our basicobjects and recyclerview
-            adapter = new BasicObjectsAdapter(getContext(), data);
+                            @Override
+                            public void onFailure(String msg) {
 
-            // Set on click and long click listeners
-            adapter.setOnBasicObjectItemLongClickListener(this);
-            adapter.setOnBasicItemClickListener(this);
+                            }
+                        });
+                    }
+                });
+                adapter.setNavigateToUserClickListener(new MemberListAdapter.OnNavigateToUserClickListener() {
+                    @Override
+                    public void onClick(TripReport.MemberUpdate clickedMember) {
+                        String uri = "geo: latitude,longtitude ?q= " + clickedMember.lat + ", "
+                                + clickedMember.lon + "";
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(uri)));
+                    }
+                });
+            } else {
+                adapter.updateAdapterData(report);
+                adapter.notifyDataSetChanged();
+            }
 
-            // Apply the adapter to the recyclerview
-            rvMembers.setAdapter(adapter);
+            LinearLayoutManager layoutManager = new LinearLayoutManager(getContext());
+            recyclerView.setLayoutManager(layoutManager);
+            recyclerView.setAdapter(adapter);
+
+            if (refreshLayout != null) {
+                refreshLayout.finishRefresh();
+            }
 
         }
 
         @Override
-        public void onBasicObjectItemClicked(BasicObjects.BasicObject basicObject) {
-            Toast.makeText(getContext(), "Clicked: " + basicObject.title, Toast.LENGTH_SHORT).show();
+        public void onRefresh(@NonNull RefreshLayout refreshLayout) {
+            buildList();
+        }
 
+        @Override
+        public void onClick(TripReport.MemberUpdate memberUpdate) {
+
+        }
+
+        @Override
+        public void onSubrowClick(TripReport.MemberUpdate memberUpdate) {
             Intent pendingIntent = new Intent(Frag_Map.SELECTED_MEMBER);
-            TripReport.MemberUpdate selectedUser = (TripReport.MemberUpdate) basicObject.obj;
-            pendingIntent.putExtra(Frag_Map.SELECTED_MEMBER, selectedUser.userid);
+            pendingIntent.putExtra(Frag_Map.SELECTED_MEMBER, memberUpdate.userid);
             mViewPager.setCurrentItem(2, pendingIntent);
 
-
         }
 
         @Override
-        public void onBasicItemLongClicked(BasicObjects.BasicObject basicObject) {
-            Toast.makeText(getContext(), "Long clicked: " + basicObject.title, Toast.LENGTH_SHORT).show();
+        public void onLongClick(TripReport.MemberUpdate memberUpdate) {
+            Toast.makeText(getContext(), "Long clicked: " + memberUpdate.displayName, Toast.LENGTH_SHORT).show();
+
+            WebApi api = new WebApi(getContext());
+            Requests.Request request = new Requests.Request(Requests.Request.Function.LOCATION_UPDATE_REQUESTED);
+            request.arguments.add(new Requests.Arguments.Argument("userid", memberUpdate.userid));
+            request.arguments.add(new Requests.Arguments.Argument("tripcode", MyApp.getCurrentTripcode()));
+            request.arguments.add(new Requests.Arguments.Argument("requestinguser", GoogleUser.getCachedUser().id));
+            api.makeRequest(request, new WebApi.WebApiResultListener() {
+                @Override
+                public void onSuccess(WebApi.OperationResults results) {
+                    if (results.list.get(0).wasSuccessful) {
+                        Toast.makeText(getContext(), "Location update was requested.", Toast.LENGTH_SHORT).show();
+                    }
+                }
+
+                @Override
+                public void onFailure(String message) {
+                    Log.w(TAG, " !!!!!!! -= onFailure | " + message + " =- !!!!!!!");
+                    Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+                }
+            });
         }
+
     }
 
-    public static class Frag_Map extends Fragment implements OnMapReadyCallback {
+    public static class Frag_Map extends Fragment implements OnMapReadyCallback,
+            GoogleMap.OnMapClickListener,
+            GoogleMap.OnCircleClickListener,
+            GoogleMap.OnPolylineClickListener,
+            GoogleMap.OnPoiClickListener,
+            GoogleMap.OnMarkerClickListener,
+            GoogleMap.OnInfoWindowClickListener {
 
         private static final String TAG = "Frag_Map";
         public static final String SELECTED_MEMBER = "SELECTED_MEMBER";
         public static final String ARG_SECTION_NUMBER = "section_number";
         public TextView txtNotInTrip;
+        public static TextView txtDebugText;
         BroadcastReceiver mainAppReceiver;
         BroadcastReceiver pageChangedToThisReceiver;
         BroadcastReceiver floatingActionButtonClickReceiver;
+        Polyline activePolyline;
         MyMapMarkers mapMarkers = new MyMapMarkers();
         public View root;
         GoogleMap map;
@@ -638,33 +949,6 @@ public class MainPager extends Fragment {
 
         public Frag_Map() {
             super();
-        }
-
-        public static class MyMapMarkers  {
-
-            public ArrayList<MyMapMarker> list = new ArrayList<>();
-
-            public static class MyMapMarker {
-                public TripReport.MemberUpdate memberUpdate;
-                public Marker mapMarker;
-
-                public void removeFromMap() {
-                    this.mapMarker.remove();
-                }
-            }
-
-            public void add(MyMapMarker mapMarker) {
-                this.list.add(mapMarker);
-            }
-
-            public MyMapMarker find(String googleuserid) {
-                for (MyMapMarker myMarker : this.list) {
-                    if (myMarker.memberUpdate.userid.equals(googleuserid)) {
-                        return myMarker;
-                    }
-                }
-                return null;
-            }
         }
 
         @Nullable
@@ -679,6 +963,12 @@ public class MainPager extends Fragment {
 
             txtNotInTrip = root.findViewById(R.id.txtNotInTrip);
             txtNotInTrip.setVisibility(MyApp.isReportingLocation() ? View.GONE : View.VISIBLE);
+
+            txtDebugText = root.findViewById(R.id.txtDebugText);
+            if (Debug.isDebuggerConnected()) {
+                txtDebugText.setVisibility(View.VISIBLE);
+                txtDebugText.setText("Debugger attached!");
+            }
 
             mainAppReceiver = new BroadcastReceiver() {
                 @Override
@@ -697,6 +987,8 @@ public class MainPager extends Fragment {
                             case SERVER_LOCATION_UPDATED:
                                 Log.i(TAG, "onReceive | Server sent a location update");
                                 TripReport tripReport = (TripReport) intent.getParcelableExtra(AppBroadcastHelper.PARCELED_EXTRA);
+                                TripDatasource ds = new TripDatasource();
+                                ds.getAllLocalLocations(100);
                                 populateMap();
                                 break;
                             case USER_LEFT_TRIP:
@@ -730,11 +1022,35 @@ public class MainPager extends Fragment {
                         Toast.makeText(context, "User " + selectedMemberUpdate.displayName
                                 + " was selected from the list - will locate on the map...", Toast.LENGTH_SHORT).show();
 
+                        // Now try to find the clicked user's marker on teh map
+                        if (mapMarkers != null && mapMarkers.list.size() > 0) {
+
+                            MyMapMarkers.MyMapMarker selectedUsersMarker = mapMarkers.find(selectedUserid);
+                            MyMapMarkers.MyMapMarker myMapMarker = mapMarkers.find(GoogleUser.getCachedUser().id);
+
+                            if (selectedUsersMarker != null && myMapMarker != null) {
+                                Toast.makeText(getContext(), myMapMarker.distanceTo(selectedUsersMarker)
+                                        + " meters away.", Toast.LENGTH_SHORT).show();
+
+                                if (activePolyline != null) {
+                                    activePolyline.remove();
+                                }
+
+                                PolylineOptions polylineOptions = new PolylineOptions();
+                                polylineOptions.add(selectedUsersMarker.toLatLng());
+                                polylineOptions.add(myMapMarker.toLatLng());
+                                polylineOptions.color(Color.RED);
+                                activePolyline = map.addPolyline(polylineOptions);
+                            }
+                        }
+
                         if (mapMarkers.list.size() > 0) {
                             MyMapMarkers.MyMapMarker selectedMarker = mapMarkers.find(selectedUserid);
                             selectedMarker.mapMarker.showInfoWindow();
                             Log.i(TAG, "onReceive ");
                         }
+
+                        mapCam.moveCameraToShowMarkers(report);
 
                     }
                 }
@@ -763,12 +1079,85 @@ public class MainPager extends Fragment {
         }
 
         @Override
+        public void onCircleClick(Circle circle) {
+            Log.i(TAG, "onCircleClick ");
+        }
+
+        @Override
+        public void onMapClick(LatLng latLng) {
+            Log.i(TAG, "onMapClick ");
+        }
+
+        @Override
+        public boolean onMarkerClick(Marker marker) {
+            Log.i(TAG, "onMarkerClick ");
+
+            try {
+                Intent pendingIntent = new Intent(Frag_Map.SELECTED_MEMBER);
+                pendingIntent.putExtra(Frag_Map.SELECTED_MEMBER, mapMarkers.find(marker).memberUpdate.userid);
+                mViewPager.setCurrentItem(SectionsPagerAdapter.VIEW_MEMBERS, pendingIntent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            MyMapMarkers.MyMapMarker myMapMarker = mapMarkers.find(GoogleUser.getCachedUser().id);
+            if (myMapMarker.mapMarker.equals(marker)) {
+                Log.w(TAG, " !!!!!!! -= onMarkerClick | CLICKED ON OWN MARKER! =- !!!!!!!");
+            } else {
+                try {
+                    Log.w(TAG, "onMarkerClick: | CLICKED ON OTHER DUDE'S MARKER!");
+                    Toast.makeText(getContext(), myMapMarker.distanceTo(marker) + " meters away.", Toast.LENGTH_SHORT).show();
+
+                    if (activePolyline != null) {
+                        activePolyline.remove();
+                    }
+
+                    PolylineOptions polylineOptions = new PolylineOptions();
+                    polylineOptions.add(marker.getPosition());
+                    polylineOptions.add(myMapMarker.mapMarker.getPosition());
+                    polylineOptions.color(Color.RED);
+                    activePolyline = map.addPolyline(polylineOptions);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            return false;
+        }
+
+        @Override
+        public void onPoiClick(PointOfInterest pointOfInterest) {
+            Log.i(TAG, "onPoiClick ");
+        }
+
+        @Override
+        public void onPolylineClick(Polyline polyline) {
+            Log.i(TAG, "onPolylineClick ");
+
+            if (activePolyline != null) {
+                Toast.makeText(getContext(), "Clicked polyline!", Toast.LENGTH_SHORT).show();
+            }
+
+        }
+
+        @Override
+        public void onInfoWindowClick(Marker marker) {
+            Log.i(TAG, "onInfoWindowClick ");
+
+
+
+        }
+
+        @Override
         public void onPause() {
             super.onPause();
 
             getContext().unregisterReceiver(mainAppReceiver);
             getContext().unregisterReceiver(floatingActionButtonClickReceiver);
             getContext().unregisterReceiver(pageChangedToThisReceiver);
+
+            // Update teh app-wide flag that the map has gone underground.
+            MyApp.mapFragPaused();
 
         }
 
@@ -781,12 +1170,49 @@ public class MainPager extends Fragment {
             getContext().registerReceiver(floatingActionButtonClickReceiver, new IntentFilter(MainActivity.FLOATING_BUTTON_CLICKED));
             getContext().registerReceiver(pageChangedToThisReceiver, new IntentFilter(SELECTED_MEMBER));
 
+            // Update the app-wide flag that the map is visible!
+            MyApp.mapFragResumed();
+
         }
 
         @Override
         public void onMapReady(GoogleMap googleMap) {
             this.map = googleMap;
             this.mapCam = new MapCam(this.map);
+            if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
+            this.map.setMyLocationEnabled(true);
+            this.map.setOnMarkerClickListener(this);
+            this.map.setOnCircleClickListener(this);
+            this.map.setOnMapClickListener(this);
+            this.map.setOnPoiClickListener(this);
+            this.map.setOnInfoWindowClickListener(this);
+            this.map.setOnPolylineClickListener(this);
+            this.map.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener() {
+                @Override
+                public void onMyLocationChange(Location location) {
+                    try {
+                        Log.i(TAG, "onMyLocationChange " + location.distanceTo(MyApp.getLastKnownLocation()) + " meters from service reported loc.");
+                        MyApp.setLastKnownLocation(location);
+                        Intent forceLocationUpdateIntent = new Intent(getContext(), LocationTrackingService.class);
+                        forceLocationUpdateIntent.putExtra(LocationTrackingService.MAP_FRAG_SUPPLIED_A_LOCATION, true);
+                        getContext().startForegroundService(forceLocationUpdateIntent);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+
+            // Set the map frag visible to true app-wide.
+            MyApp.mapFragResumed();
 
             populateMap();
             // populateMemberList();
@@ -812,15 +1238,32 @@ public class MainPager extends Fragment {
             TripReport mostRecentGroupUpdate = lastXTripReport.get(0);
 
             // Clear the map entirely
-            map.clear();
+            // map.clear();
+            for (MyMapMarkers.MyMapMarker marker : mapMarkers.list) {
+                marker.mapMarker.remove();
+            }
             mapMarkers.list.clear();
 
             // Loop through each member in the most recent update
             for (TripReport.MemberUpdate member : mostRecentGroupUpdate.list) {
+
+                // See if the user has an avatar cached and get and cache it if not
+                member.avatar = getCachedAvatar(member.userid);
+
                 // Start creating a map marker for this user's location update
                 MarkerOptions m = new MarkerOptions();
                 m.position(member.toLatLng());
-                BitmapDescriptor pinicon = BitmapDescriptorFactory.fromResource(R.drawable.facility_map_pin_4);
+
+                BitmapDescriptor bitmap;
+
+
+
+                if (getCachedAvatar(member.userid) == null) {
+                    getAvatar(member);
+                    bitmap = BitmapDescriptorFactory.fromBitmap(constructMapPin(R.drawable.car_icon_circular));
+                } else {
+                    bitmap = BitmapDescriptorFactory.fromBitmap(constructMapPin(getCachedAvatar(member.userid)));
+                }
 
                 // Flag as the initiator if this member prompted this server location updated broadcast
                 boolean wasInitiator = false;
@@ -830,18 +1273,102 @@ public class MainPager extends Fragment {
                 }
 
                 // Set the pin icon and add to map
-                m.icon(pinicon);
+                m.icon(bitmap);
                 m.title(member.displayName);
                 MyMapMarkers.MyMapMarker myMapMarker = new MyMapMarkers.MyMapMarker();
                 myMapMarker.memberUpdate = member;
                 myMapMarker.mapMarker = map.addMarker(m);
                 mapMarkers.add(myMapMarker);
 
-                mapCam.moveCameraToShowMarkers(mostRecentGroupUpdate);
+                // Add the accuracy circle
+                CircleOptions circleOptions = new CircleOptions()
+                        .center(member.toLatLng())
+                        .clickable(true)
+                        .radius(member.accuracy_meters)
+                        .strokeWidth(1)
+                        .strokeColor(Color.parseColor("#BBFF9000"))
+                        .fillColor(Color.parseColor("#44FF9000"));
+
+                // mapCam.moveCameraToShowMarkers(mostRecentGroupUpdate);
             }
 
-            // Draw the member history polylines
-            // drawAllMembersHistory(lastXTripReport);
+        }
+
+        public Bitmap getCachedAvatar(String googleid) {
+            for (TripReport.MemberUpdate cachedMember : cachedAvatars) {
+                if (cachedMember.userid.equals(googleid)) {
+                    return cachedMember.avatar;
+                }
+            }
+            return null;
+        }
+
+        private Bitmap constructMapPin(Bitmap bitmap) {
+
+            View customMarkerView = ((LayoutInflater) getContext().getSystemService(Context.LAYOUT_INFLATER_SERVICE))
+                    .inflate(R.layout.view_custom_marker, null);
+            ImageView markerImageView = (ImageView) customMarkerView.findViewById(R.id.profile_image);
+            markerImageView.setImageBitmap(bitmap);
+            customMarkerView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+            customMarkerView.layout(0, 0, customMarkerView.getMeasuredWidth(), customMarkerView.getMeasuredHeight());
+            customMarkerView.buildDrawingCache();
+            Bitmap returnedBitmap = Bitmap.createBitmap(customMarkerView.getMeasuredWidth(), customMarkerView.getMeasuredHeight(),
+                    Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(returnedBitmap);
+            canvas.drawColor(Color.WHITE, PorterDuff.Mode.SRC_IN);
+            Drawable drawable = customMarkerView.getBackground();
+            if (drawable != null)
+                drawable.draw(canvas);
+            customMarkerView.draw(canvas);
+            return returnedBitmap;
+        }
+
+        private Bitmap constructMapPin(int imageResource) {
+
+            View customMarkerView = ((LayoutInflater) getContext().getSystemService(Context.LAYOUT_INFLATER_SERVICE))
+                    .inflate(R.layout.view_custom_marker, null);
+            ImageView markerImageView = (ImageView) customMarkerView.findViewById(R.id.profile_image);
+            markerImageView.setImageDrawable(getResources().getDrawable(imageResource));
+            customMarkerView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+            customMarkerView.layout(0, 0, customMarkerView.getMeasuredWidth(), customMarkerView.getMeasuredHeight());
+            customMarkerView.buildDrawingCache();
+            Bitmap returnedBitmap = Bitmap.createBitmap(customMarkerView.getMeasuredWidth(), customMarkerView.getMeasuredHeight(),
+                    Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(returnedBitmap);
+            canvas.drawColor(Color.WHITE, PorterDuff.Mode.SRC_IN);
+            Drawable drawable = customMarkerView.getBackground();
+            if (drawable != null)
+                drawable.draw(canvas);
+            customMarkerView.draw(canvas);
+            return returnedBitmap;
+        }
+
+        public void setCachedAvatar(TripReport.MemberUpdate member, Bitmap bitmap) {
+            for (TripReport.MemberUpdate existingMember : cachedAvatars) {
+                if (existingMember.userid.equals(member.userid)) {
+                    existingMember.avatar = bitmap;
+                }
+            }
+            member.avatar = bitmap;
+            cachedAvatars.add(member);
+        }
+
+        private void getAvatar(final TripReport.MemberUpdate memberUpdate) {
+            StaticHelpers.Bitmaps.getFromUrl(memberUpdate.photoUrl, new StaticHelpers.Bitmaps.GetImageFromUrlListener() {
+                @Override
+                public void onSuccess(Bitmap bitmap) {
+
+                    setCachedAvatar(memberUpdate, bitmap);
+                    // populateMap();
+                }
+
+                @Override
+                public void onFailure(String msg) {
+                    Bitmap defaultBitmap = StaticHelpers.Bitmaps.getBitmapFromResource(getContext(), R.drawable.car2);
+                    memberUpdate.avatar = defaultBitmap;
+                    // populateMap();
+                }
+            });
         }
 
         private GroundOverlay drawCircle(LatLng latLng) {
@@ -879,8 +1406,12 @@ public class MainPager extends Fragment {
             GoogleMap.OnCameraMoveCanceledListener {
 
         private GoogleMap map;
-        private long startedMovingAt = 0;
-        public ArrayList<GroundOverlay> circles = new ArrayList<>();
+
+        long cameraResetLastRunMillis;
+        public int resetCameraDelay = 10000;
+
+        public Handler timerHandler = new Handler();
+        public Handler timerDisplayHandler = new Handler();
 
         public MapCam(GoogleMap map) {
             this.map = map;
@@ -888,16 +1419,42 @@ public class MainPager extends Fragment {
             this.map.setOnCameraMoveStartedListener(this);
             this.map.setOnCameraIdleListener(this);
             this.map.setOnCameraMoveCanceledListener(this);
+            cameraResetLastRunMillis = System.currentTimeMillis();
+            timerDisplayHandler.postDelayed(timerDisplayRunnable, 100);
         }
 
         //runs without a timer by reposting this handler at the end of the runnable
-        Handler timerHandler = new Handler();
         Runnable timerRunnable = new Runnable() {
             @Override
             public void run() {
                 Log.i(TAG, "run | Resetting the camera");
                 TripReport updates = new TripDatasource().getMostRecentMemberLocEntry(MyApp.getCurrentTripcode());
-                moveCameraToShowMarkers(updates);
+                if (updates != null) {
+                    moveCameraToShowMarkers(updates);
+                } else {
+                    Log.w(TAG, "run: | timerRunnable | datasource returned null when calling: getMostRecentMemberLocEntry(...)");
+                }
+
+
+            }
+        };
+
+        Runnable timerDisplayRunnable = new Runnable() {
+            @Override
+            public void run() {
+
+                long diffMs = System.currentTimeMillis() - cameraResetLastRunMillis;
+                long diffS = diffMs / 1000;
+                long secsUntil = (resetCameraDelay / 1000) - diffS;
+
+                Frag_Map.txtDebugText.setText("DEBUG: " + secsUntil + " seconds till camera reset");
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    if (timerDisplayHandler.hasCallbacks(this)) {
+                        timerDisplayHandler.removeCallbacks(timerDisplayRunnable);
+                    }
+                }
+                timerDisplayHandler.postDelayed(timerDisplayRunnable, 100);
             }
         };
 
@@ -909,9 +1466,9 @@ public class MainPager extends Fragment {
         @RequiresApi(api = Build.VERSION_CODES.Q)
         @Override
         public void onCameraMove() {
-            Log.i(TAG, "onCameraMove Removed any pending camera reset timers");
             if (timerHandler.hasCallbacks(timerRunnable)) {
                 timerHandler.removeCallbacks(timerRunnable);
+                cameraResetLastRunMillis = System.currentTimeMillis();
             }
         }
 
@@ -929,15 +1486,20 @@ public class MainPager extends Fragment {
 
             Log.i(TAG, " !!!!!!! -= onCameraIdle =- !!!!!!!");
             Log.w(TAG, " !!!!!!! -= The camera resetter is now cocked and will fire soon! =- !!!!!!!");
-            timerHandler.postDelayed(timerRunnable, 5000);
+            timerHandler.postDelayed(timerRunnable, this.resetCameraDelay);
+            cameraResetLastRunMillis = System.currentTimeMillis();
             TripReport updates = new TripDatasource().getMostRecentMemberLocEntry(MyApp.getCurrentTripcode());
             if (updates != null) {
-                doPulseEvaluations(updates);
+                // doPulseEvaluations(updates);
             }
         }
 
         /** Moves the camera to a position such that both the start and end map markers are viewable on screen. **/
         private void moveCameraToShowMarkers(TripReport updates) {
+
+            if (!MyApp.isReportingLocation()) {
+                return;
+            }
 
             Log.d(TAG, "Moving the camera to get all the markers in view");
 
@@ -958,15 +1520,16 @@ public class MainPager extends Fragment {
             try {
                 // Finally we actually get to move the damn camera
                 map.animateCamera(cu, 750, null);
+                cameraResetLastRunMillis = System.currentTimeMillis();
 
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
 
-        public void doPulseEvaluations(TripReport report) {
+/*        public void doPulseEvaluations(TripReport report) {
 
-            // Remove all pulsing indicators so we don't pile em up ad infinitum.
+            // Remove all pulsing indicators so we don't pile em up
             for (GroundOverlay gu : circles) {
                 gu.remove();
             }
@@ -979,12 +1542,12 @@ public class MainPager extends Fragment {
             }
         }
 
-        /**
+        *//**
          * Shows a animated, pulsing circle at the specified position.  Don't forget to invalidate and
          * re-call if the map gets moved at all!
          * @param latLng Where to put the thing on the thing.
          * @return Yo face.
-         */
+         *//*
         private GroundOverlay pulseLocation(LatLng latLng) {
             GradientDrawable d = new GradientDrawable();
             d.setShape(GradientDrawable.OVAL);
@@ -1005,8 +1568,11 @@ public class MainPager extends Fragment {
             double meters_to_pixels = (Math.cos(map.getCameraPosition().target.latitude
                     * Math.PI /180) * 2 * Math.PI * 6378137) / (256
                     * Math.pow(2, map.getCameraPosition().zoom));
-            final int radius = (int)(meters_to_pixels * 35);
+
+            final int radius = (int)(meters_to_pixels * 30);
+
             Log.i(TAG, " !!!!!!! -= pulseLocation RADIUS: " + radius + " =- !!!!!!!");
+
 
             // Add the circle to the map
             final GroundOverlay circle = map.addGroundOverlay(new GroundOverlayOptions()
@@ -1038,9 +1604,223 @@ public class MainPager extends Fragment {
             valueAnimator.start();
 
             return circle;
-        }
+        }*/
 
     } // MapCam class
+
+    public static class Frag_ViewMessages extends Fragment implements
+            UserMessagesAdapter.OnUserMessageClickListener,
+            UserMessagesAdapter.OnUserMessageLongClickListener {
+
+        public static final String SENT_MESSAGE = "SENT_MESSAGE";
+        private static final String TAG = "Frag_ViewMessages";
+        public static final String ARG_SECTION_NUMBER = "section_number";
+        public TextView txtNotInTrip;
+        public View root;
+        SmartRefreshLayout refreshLayout;
+        TextView txtLoadingMsgs;
+        RecyclerView recyclerView;
+        UserMessagesAdapter adapter;
+        BroadcastReceiver mainAppReceiver;
+        BroadcastReceiver pageChangedToThisReceiver;
+        BroadcastReceiver fabReceiver;
+
+
+        @Nullable
+        @Override
+        public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+                                 @Nullable Bundle savedInstanceState) {
+
+            MyApp.setNewMessagePending(false);
+
+            Log.w(TAG, " !!!!!!! -= onCreateView =- !!!!!!!");
+
+            root = inflater.inflate(R.layout.frag_messages, container, false);
+            super.onCreateView(inflater, container, savedInstanceState);
+
+            refreshLayout = root.findViewById(R.id.refreshLayout);
+            refreshLayout.setEnableRefresh(true);
+            refreshLayout.setRefreshHeader(new MaterialHeader(getContext()));
+
+            txtLoadingMsgs = root.findViewById(R.id.txtLoadingMsgs);
+
+                    recyclerView = root.findViewById(R.id.recyclerView);
+            txtNotInTrip = root.findViewById(R.id.txtNotInTrip);
+            txtNotInTrip.setVisibility(MyApp.isReportingLocation() ? View.GONE : View.VISIBLE);
+
+            mainAppReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent.hasExtra(AppBroadcastHelper.BROADCAST_TYPE)) {
+
+                        // Parse out the broadcast type
+                        AppBroadcastHelper.BroadcastType type = (AppBroadcastHelper.BroadcastType)
+                                intent.getSerializableExtra(AppBroadcastHelper.BROADCAST_TYPE);
+
+                        // Act based on the broadcast type
+                        switch (type) {
+                            case MESSAGE_RECEIVED:
+                                Log.i(TAG, "onReceive | MESSAGE RECEIVED WE ARE AT THE MSGS FRAG!");
+                                buildList();
+                                break;
+                        }
+
+                    } else {
+                        Log.i(TAG, "onReceive | Broadcast didn't have a type!  What the fuck?!");
+                    }
+                }
+            };
+
+            /*pageChangedToThisReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent != null && intent.getAction() != null) {
+                        if (intent.getAction().equals(Frag_Map.SELECTED_MEMBER)) {
+                            String selectedUserid = intent.getStringExtra(Frag_Map.SELECTED_MEMBER);
+                            if (selectedUserid != null) {
+                                Log.i(TAG, "onReceive | User selected a map marker and now we're here!");
+
+                                adapter.highlightUser(selectedUserid);
+
+                            }
+                        }
+                    }
+                }
+            };*/
+
+            recyclerView = root.findViewById(R.id.recyclerView);
+
+            fabReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+
+                    MessageDialog msgDialog = new MessageDialog(getContext(), new MessageDialog.MessageSubmitResultListener() {
+                        @Override
+                        public void onSuccess() {
+                            Toast.makeText(getContext(), "Message submitted", Toast.LENGTH_SHORT).show();
+                            buildList();
+                        }
+
+                        @Override
+                        public void onFailure(String msg) {
+                            Toast.makeText(getContext(), msg, Toast.LENGTH_SHORT).show();
+                        }
+                    });
+
+                    msgDialog.show();
+
+                }
+            };
+
+            pageChangedToThisReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    buildList();
+                }
+            };
+
+            return root;
+        }
+
+        @Override
+        public void onPause() {
+            super.onPause();
+
+            getContext().unregisterReceiver(mainAppReceiver);
+            getContext().unregisterReceiver(pageChangedToThisReceiver);
+            getContext().unregisterReceiver(fabReceiver);
+
+        }
+
+        @Override
+        public void onResume() {
+            super.onResume();
+
+            Log.i(TAG, "onResume | Registered the main app receiver");
+            getContext().registerReceiver(mainAppReceiver, new IntentFilter(AppBroadcastHelper.GLOBAL_BROADCAST));
+            getContext().registerReceiver(fabReceiver, new IntentFilter(MainActivity.FLOATING_BUTTON_CLICKED));
+
+            getContext().registerReceiver(pageChangedToThisReceiver, new IntentFilter(Frag_ViewMessages.SENT_MESSAGE));
+            buildList();
+        }
+
+        void buildList() {
+
+            // Grab available messages as an ArrayList<UserMessage>
+            TripDatasource ds = new TripDatasource();
+            ArrayList<UserMessage> allTripMessages = ds.getAllUserMessages(MyApp.getCurrentTripcode());
+
+            if (allTripMessages == null || allTripMessages.size() == 0) {
+                getServerMessages();
+                return;
+            }
+
+            // Instantiate and populate our custom adapter.
+            adapter = new UserMessagesAdapter(getContext(), allTripMessages, this, this);
+
+            // Apply the adapter to the recyclerview.
+            recyclerView.setAdapter(adapter);
+
+            // This is still new to me and specific to RecyclerViews but it is necessary to create a
+            // LinearLayoutManager (configure it if needed) and then apply it to the recyclerview.
+            // If you do not do this it simply will not appear.
+            LinearLayoutManager layoutManager = new LinearLayoutManager(getContext());
+            layoutManager.setReverseLayout(true); // EXPERIMENTAL -
+            recyclerView.setLayoutManager(layoutManager);
+
+            adapter.notifyDataSetChanged();
+
+            // Scroll to the end since this is representing chat messages.
+            recyclerView.scrollToPosition(adapter.getItemCount() - 1); // Not working
+
+        }
+
+        void getServerMessages() {
+            txtLoadingMsgs.setVisibility(View.VISIBLE);
+
+            WebApi api = new WebApi(getContext());
+            Requests.Request request = new Requests.Request(Requests.Request.Function.GET_TRIP_MESSAGES);
+            request.arguments.add(new Requests.Arguments.Argument("tripcode", MyApp.getCurrentTripcode()));
+            request.arguments.add(new Requests.Arguments.Argument("limit", "100"));
+            request.arguments.add(new Requests.Arguments.Argument("orderargument", "asc"));
+            api.makeRequest(request, new WebApi.WebApiResultListener() {
+                @Override
+                public void onSuccess(WebApi.OperationResults results) {
+                    txtLoadingMsgs.setVisibility(View.INVISIBLE);
+                    txtLoadingMsgs.setVisibility(View.INVISIBLE);
+                    String serializedMsgs = results.list.get(0).result;
+                    ArrayList<UserMessage> msgs = null;
+                    try {
+                        msgs = UserMessage.parseMany(serializedMsgs);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                    if (msgs != null && msgs.size() > 0) {
+                        for (UserMessage msg : msgs) {
+                            msg.appendToDb();
+                        }
+                    }
+                    buildList();
+                }
+
+                @Override
+                public void onFailure(String message) {
+                    txtLoadingMsgs.setVisibility(View.INVISIBLE);
+                }
+            });
+        }
+
+        @Override
+        public void onClick(UserMessage message) {
+
+        }
+
+        @Override
+        public void onLongClick(UserMessage message) {
+
+        }
+    }
 
     //endregion *********************************************************************************
 
@@ -1048,9 +1828,11 @@ public class MainPager extends Fragment {
 
     public class SectionsPagerAdapter extends FragmentPagerAdapter {
 
+        private int itemCount = 1;
         public static final int JOIN_CREATE = 0;
         public static final int VIEW_MEMBERS= 1;
         public static final int VIEW_MAP = 2;
+        public static final int VIEW_MESSAGES = 3;
 
         public SectionsPagerAdapter(androidx.fragment.app.FragmentManager fm) {
             super(fm);
@@ -1088,6 +1870,15 @@ public class MainPager extends Fragment {
                 return fragment;
             }
 
+            if (position == VIEW_MESSAGES) {
+                Fragment fragment = new Frag_ViewMessages();
+                Bundle args = new Bundle();
+                args.putInt(Frag_Map.ARG_SECTION_NUMBER, position + 1);
+                args.putString("SOME_ARG", "Fuck you!");
+                fragment.setArguments(args);
+                return fragment;
+            }
+
             /* if (position == VIEW_MAP) {
                 Fragment fragment = new Frag_ViewMap();
                 Bundle args = new Bundle();
@@ -1101,7 +1892,7 @@ public class MainPager extends Fragment {
 
         @Override
         public int getCount() {
-            return 3;
+            return this.itemCount;
         }
 
         @Override
@@ -1116,10 +1907,21 @@ public class MainPager extends Fragment {
                     return "View Members";
                 case VIEW_MAP:
                     return "View Map";
+                case VIEW_MESSAGES:
+                    return "Messages";
             }
             return null;
         }
 
+        public void setItemCount(int count) {
+            this.itemCount = count;
+            this.notifyDataSetChanged();
+        }
+
+        public void setItemCount() {
+            this.itemCount = MyApp.isReportingLocation() ? 3 : 1;
+            this.notifyDataSetChanged();
+        }
 
     }
 

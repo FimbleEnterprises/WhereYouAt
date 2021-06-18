@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
 
-import com.fimbleenterprises.whereuat.preferences.MySettingsHelper;
+import com.fimbleenterprises.whereuat.helpers.MySettingsHelper;
 
 import java.util.Locale;
 
@@ -15,7 +15,7 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
 
     private final static String TAG = "MySQLiteHelper.";
     public static final String DATABASE_NAME = "whereyouat.db";
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 5;
     private MySettingsHelper options;
 
     //////////////////////////////////////////////////////////////////////////////////////////////
@@ -37,10 +37,12 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
     public static final String COLUMN_MISC3 = "MISC3";
     public static final String COLUMN_MISC4 = "MISC4";
 
-    public static final String COLUMN_SENDERID = "COLUMN_SENDERID";
+    /*public static final String COLUMN_SENDERID = "COLUMN_SENDERID";
     public static final String COLUMN_RECIPIENTID = "COLUMN_RECIPIENTID";
     public static final String COLUMN_MESSAGE = "COLUMN_MESSAGE";
     public static final String COLUMN_ISREAD = "COLUMN_ISREAD";
+    public static final String COLUMN_IMAGEURL = "COLUMN_IMAGEURL";*/
+    public static final String COLUMN_USER_MESSAGE_AS_JSON = "COLUMN_USER_MESSAGE_AS_JSON";
 
     public static final String COLUMN_LAT = "COLUMN_LAT";
     public static final String COLUMN_LON = "COLUMN_LON";
@@ -59,6 +61,12 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
             COLUMN_MISC2,
             COLUMN_MISC3,
             COLUMN_MISC4
+    };
+
+    public static final String[] ALL_USER_MESSAGE_COLUMNS = {
+            COLUMN_ID,
+            COLUMN_TRIPCODE,
+            COLUMN_USER_MESSAGE_AS_JSON,
     };
 
     public static final String[] ALL_MY_LOC_COLUMNS = {
@@ -103,11 +111,13 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
 
     private static final String MESSAGES_TABLE_CREATE_QUERY = "create table " + TABLE_NAME_MESSAGES + "(" +
             COLUMN_ID + " integer primary key autoincrement, " +
-            COLUMN_SENDERID + " text, " +
-            COLUMN_RECIPIENTID + " text, " +
             COLUMN_DTDATETIME + " text, " +
+            COLUMN_USER_MESSAGE_AS_JSON + " text);";
+            /*COLUMN_SENDERID + " text, " +
+            COLUMN_IMAGEURL + " text, " +
+            COLUMN_RECIPIENTID + " text, " +
             COLUMN_MESSAGE + " text, " +
-            COLUMN_ISREAD + " integer); ";
+            COLUMN_ISREAD + " integer); ";*/
 
 
     public MySQLiteHelper(Context context) {
@@ -225,11 +235,15 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
         addColumnIfMissing(TABLE_NAME_MEMBERUPDATES, COLUMN_TRIPCODE, TYPE_REAL, db);
 
         // Messages
-        addColumnIfMissing(TABLE_NAME_MEMBERUPDATES, COLUMN_SENDERID, TYPE_TEXT, db);
-        addColumnIfMissing(TABLE_NAME_MEMBERUPDATES, COLUMN_RECIPIENTID, TYPE_TEXT, db);
-        addColumnIfMissing(TABLE_NAME_MEMBERUPDATES, COLUMN_DTDATETIME, TYPE_TEXT, db);
-        addColumnIfMissing(TABLE_NAME_MEMBERUPDATES, COLUMN_MESSAGE, TYPE_TEXT, db);
-        addColumnIfMissing(TABLE_NAME_MEMBERUPDATES, COLUMN_ISREAD, TYPE_INTEGER, db);
+        /*addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_SENDERID, TYPE_TEXT, db);
+        addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_RECIPIENTID, TYPE_TEXT, db);
+        addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_DTDATETIME, TYPE_TEXT, db);
+        addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_MESSAGE, TYPE_TEXT, db);
+        addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_IMAGEURL, TYPE_TEXT, db);
+        addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_ISREAD, TYPE_INTEGER, db);*/
+        addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_ID, TYPE_INTEGER, db);
+        addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_TRIPCODE, TYPE_TEXT, db);
+        addColumnIfMissing(TABLE_NAME_MESSAGES, COLUMN_USER_MESSAGE_AS_JSON, TYPE_TEXT, db);
 
         // My location table
         addColumnIfMissing(TABLE_NAME_MYLOCATION, COLUMN_ID, TYPE_INTEGER, db);

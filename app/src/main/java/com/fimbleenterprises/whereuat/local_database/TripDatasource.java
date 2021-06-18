@@ -8,19 +8,23 @@ import android.database.sqlite.SQLiteDatabase;
 import android.util.Log;
 
 import com.fimbleenterprises.whereuat.MyApp;
+import com.fimbleenterprises.whereuat.generic_objs.UserMessage;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.ALL_TRIPENTRY_COLUMNS;
+import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.ALL_USER_MESSAGE_COLUMNS;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_ACC;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_DTDATETIME;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_ID;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_JSON;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_PROVIDER;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_TRIPCODE;
+import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_USER_MESSAGE_AS_JSON;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.TABLE_NAME_MEMBERUPDATES;
+import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.TABLE_NAME_MESSAGES;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.TABLE_NAME_MYLOCATION;
 
 public class TripDatasource {
@@ -89,25 +93,72 @@ public class TripDatasource {
         return index;
     }
 
-
-
-    /*private boolean updateMemberLocations(MemberUpdates memberUpdates) {
-        boolean result = true;
+    /**
+     * Appends a received user message to the local device's database.
+     * @param message The received, deserialized UserMessage object.
+     * @return Boolean indicating success or failure.
+     */
+    public boolean appendUserMessage(UserMessage message) {
+        boolean result;
         try {
             ContentValues values = new ContentValues();
-            values.put(MySQLiteHelper.COLUMN_JSON, memberUpdates.toJson());
-            values.put(MySQLiteHelper.COLUMN_TRIPCODE, memberUpdates.tripcode);
-            values.put(COLUMN_DATETIME, memberUpdates.initiatedon.toLocalDate().toString());
+            values.put(COLUMN_TRIPCODE, message.tripcode);
+            values.put(COLUMN_USER_MESSAGE_AS_JSON, message.toGson());
 
-            result = (database.update(MySQLiteHelper.TABLE_NAME_MEMBERUPDATES, values, null, null) > 0);
-            Log.i(TAG, "updateMemberLocations Members updated" + result);
+            result = (database.insert(MySQLiteHelper.TABLE_NAME_MESSAGES, null, values) > 0);
+            Log.i(TAG, "appendUserMessage | Result: " + result);
 
         } catch (SQLException e) {
             result = false;
             e.printStackTrace();
         }
         return result;
-    }*/
+    }
+
+    /**
+     * Retrieves all user messages from oldest to newest for a particular trip code.
+     * @param tripcode The tripcode to constrain the query with.
+     * @return An arraylist of UserMessage objects.
+     */
+    public ArrayList<UserMessage> getAllUserMessages(String tripcode) {
+
+        ArrayList<UserMessage> allUserMessages = new ArrayList<>();
+
+        String whereClause = COLUMN_TRIPCODE + " = ?";
+        String[] whereArgs = {String.valueOf(tripcode)};
+
+        Cursor c = database.query(TABLE_NAME_MESSAGES, ALL_USER_MESSAGE_COLUMNS, whereClause, whereArgs,
+                null, null, COLUMN_ID + " asc");
+
+        try {
+            while (c.moveToNext()) {
+                int colIndex = c.getColumnIndex(COLUMN_USER_MESSAGE_AS_JSON);
+                String json = c.getString(colIndex);
+                UserMessage msg = new UserMessage(json);
+                allUserMessages.add(msg);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+        return allUserMessages;
+    }
+
+    /**
+     * Removes all messages from the database associated with the supplied trip code.
+     * @param tripcode
+     * @return
+     */
+    public boolean deleteAllLocalMessages(String tripcode) {
+        boolean result;
+
+        String whereClause = COLUMN_TRIPCODE + " = ?";
+        String[] whereArgs = { tripcode };
+        result = (database.delete(TABLE_NAME_MESSAGES, whereClause, whereArgs)) > 0;
+        Log.i(TAG, "deleteMemberUpdatesByTripcode " + result);
+        return result;
+    }
 
     public boolean insertMemberLocations(TripReport tripReport) {
         boolean result = true;
@@ -115,7 +166,7 @@ public class TripDatasource {
             ContentValues values = new ContentValues();
             values.put(COLUMN_JSON, tripReport.toJson());
             values.put(MySQLiteHelper.COLUMN_TRIPCODE, tripReport.tripcode);
-            values.put(COLUMN_DTDATETIME, tripReport.initiatedon);
+            values.put(COLUMN_DTDATETIME, tripReport.getInitiatedOnUtc().toString());
 
             result = (database.insert(MySQLiteHelper.TABLE_NAME_MEMBERUPDATES, null, values) > 0);
             Log.i(TAG, "insertMemberLocations - row inserted. (trip: " + tripReport.tripcode + ")");
@@ -199,7 +250,7 @@ public class TripDatasource {
 
             localUserLocation.lat = c.getDouble(lat_Index);
             localUserLocation.lon = c.getDouble(lon_Index);
-            localUserLocation.accuracty = c.getFloat(acc_Index);
+            localUserLocation.accuracy = c.getFloat(acc_Index);
             localUserLocation.provider = c.getString(provider_Index);
             localUserLocation.datetime = c.getLong(datetime_Index);
 
@@ -222,7 +273,7 @@ public class TripDatasource {
             ContentValues values = new ContentValues();
             values.put(MySQLiteHelper.COLUMN_LAT, localUserLocation.lat);
             values.put(MySQLiteHelper.COLUMN_LON, localUserLocation.lon);
-            values.put(COLUMN_ACC, localUserLocation.accuracty);
+            values.put(COLUMN_ACC, localUserLocation.accuracy);
             values.put(COLUMN_DTDATETIME, localUserLocation.datetime);
             values.put(COLUMN_PROVIDER, localUserLocation.provider);
 

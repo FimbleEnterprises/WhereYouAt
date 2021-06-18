@@ -17,10 +17,13 @@ public class Requests {
         public static final String UPSERT_FCM_TOKEN = "upsertfcmtoken";
         public static final String JOIN_TRIP = "jointrip";
         public static final String LEAVE_TRIP = "leavetrip";
+        public static final String LOCATION_UPDATE_REQUESTED = "locationupdaterequested";
+        public static final String SEND_MESSAGE = "sendmsg";
+        public static final String GET_TRIP_MESSAGES = "gettripmessages";
         // endregion
 
         public enum Function {
-            CREATE_NEW_TRIP, UPSERT_USER, UPDATE_TRIP, UPSERT_FCM_TOKEN, JOIN_TRIP, LEAVE_TRIP;
+            CREATE_NEW_TRIP, UPSERT_USER, UPDATE_TRIP, UPSERT_FCM_TOKEN, JOIN_TRIP, LEAVE_TRIP, LOCATION_UPDATE_REQUESTED, SEND_MESSAGE, GET_TRIP_MESSAGES;
         }
 
         private String getFunctionName(Enum<Function> function) {
@@ -35,6 +38,12 @@ public class Requests {
                     return JOIN_TRIP;
                 case 5 :
                     return LEAVE_TRIP;
+                case 6 :
+                    return LOCATION_UPDATE_REQUESTED;
+                case 7 :
+                    return SEND_MESSAGE;
+                case 8 :
+                    return GET_TRIP_MESSAGES;
                 default:
                     return UPSERT_FCM_TOKEN;
 

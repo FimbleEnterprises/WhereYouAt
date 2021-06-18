@@ -11,6 +11,15 @@
         android:layout_height="match_parent">
 
         <TextView
+            android:id="@+id/txtLoadingMsgs"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:ems="10"
+            android:text="Loading messages..."
+            android:visibility="invisible" />
+
+        <TextView
             android:id="@+id/txtNotInTrip"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -23,10 +32,11 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <com.fimbleenterprises.whereuat.NonScrollRecyclerView
+            <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:nestedScrollingEnabled="false"
                 tools:layout_editor_absoluteX="1dp"
                 tools:layout_editor_absoluteY="1dp" />
 

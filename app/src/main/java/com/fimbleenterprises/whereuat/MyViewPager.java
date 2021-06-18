@@ -7,7 +7,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
-import com.fimbleenterprises.whereuat.preferences.MySettingsHelper;
+import com.fimbleenterprises.whereuat.helpers.MySettingsHelper;
 
 import androidx.annotation.Nullable;
 import androidx.viewpager.widget.ViewPager;
@@ -51,6 +51,11 @@ public class MyViewPager extends ViewPager {
         options = new MySettingsHelper();
     }
 
+    public MyViewPager(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        options = new MySettingsHelper();
+    }
+
     public void addOnPageChangeChangedListener(MyPageChangedListener listener) {
         this.mPageChangedListener = listener;
     }
@@ -78,6 +83,13 @@ public class MyViewPager extends ViewPager {
      */
     @Override
     public void setCurrentItem(int item) {
+
+        if (!MyApp.isReportingLocation()) {
+            Log.w(TAG, " !!!!!!! -= setCurrentItem | CANNOT SCROLL FROM 0 - TRIP NOT RUNNING! =- !!!!!!!");
+            super.setCurrentItem(0);
+            return;
+        }
+
         Log.d(TAG, "Page is being set to: " + item);
         currentPosition = item;
         super.setCurrentItem(item);
@@ -92,6 +104,13 @@ public class MyViewPager extends ViewPager {
      * @param item Item index to select
      */
     public void setCurrentItem(int item, Intent intent) {
+
+        if (!MyApp.isReportingLocation()) {
+            Log.w(TAG, " !!!!!!! -= setCurrentItem | CANNOT SCROLL FROM 0 - TRIP NOT RUNNING! =- !!!!!!!");
+            super.setCurrentItem(0);
+            return;
+        }
+
         Log.d(TAG, "Page is being set to: " + item);
         currentPosition = item;
         pendingIntent = intent;
@@ -141,11 +160,6 @@ public class MyViewPager extends ViewPager {
 
     }
 
-    public MyViewPager(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        options = new MySettingsHelper();
-    }
-
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         // Log.d(TAG, "MyViewPager received a touch event.  Paging enabled: " + this.isPagingEnabled);
@@ -163,28 +177,12 @@ public class MyViewPager extends ViewPager {
         //Log.d(TAG, "Enable paging: " + this.isPagingEnabled);
     }
 
+
+
     @Override
     protected boolean canScroll(View v, boolean checkV, int dx, int x, int y) {
-
-/*        Log.v(TAG, "canScroll: Swipe triggered from:" + v.getId());
-        String tag = "";
-
-        if (Activity_MainActivity.mViewPager.getCurrentItem() == 4) {
-            ViewParent viewparent = v.getParent();
-            View parent;
-            if (viewparent instanceof RelativeLayout) {
-                parent = (RelativeLayout) viewparent;
-                if (parent.getTag() != null) {
-                    tag = parent.getTag().toString();
-                }
-                if (tag.equals("overview_map_container")) {
-                    Log.w(TAG, "canScroll: ALLOWING A SCROLL! ");
-                    return false;
-                }
-            }
-        }
-        */
-        return super.canScroll(v, checkV, dx, x, y);
+        return false;
+        // return super.canScroll(v, checkV, dx, x, y);
     }
 
 }

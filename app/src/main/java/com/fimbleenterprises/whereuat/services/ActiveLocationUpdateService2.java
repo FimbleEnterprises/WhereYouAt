@@ -1,6 +1,5 @@
 package com.fimbleenterprises.whereuat.services;
 
-import android.app.Notification;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
@@ -15,8 +14,8 @@ import android.util.Log;
 
 import com.fimbleenterprises.whereuat.AppBroadcastHelper;
 import com.fimbleenterprises.whereuat.MyApp;
-import com.fimbleenterprises.whereuat.StaticHelpers;
 import com.fimbleenterprises.whereuat.googleuser.GoogleUser;
+import com.fimbleenterprises.whereuat.helpers.MyNotificationManager;
 import com.fimbleenterprises.whereuat.local_database.LocalUserLocation;
 import com.fimbleenterprises.whereuat.local_database.TripReport;
 import com.fimbleenterprises.whereuat.rest_api.Requests;
@@ -28,12 +27,13 @@ import static com.fimbleenterprises.whereuat.AppBroadcastHelper.BroadcastType.AC
 import static com.fimbleenterprises.whereuat.AppBroadcastHelper.BroadcastType.LOCATION_CHANGED_LOCALLY;
 import static com.fimbleenterprises.whereuat.AppBroadcastHelper.BroadcastType.SERVER_LOCATION_UPDATED;
 
-public class ActiveLocationUpdateService extends Service implements LocationListener {
+public class ActiveLocationUpdateService2 extends Service implements LocationListener {
 
     // region STATIC DECLARATIONS
 
     // -= ************* Static strings *********** =- //
-    public static final String SWITCH_TO_PASSIVE_SERVICE = "STOP_COMMAND";
+    public static final String STOP_SERVICE_OUTRIGHT = "STOP_SERVICE_OUTRIGHT";
+    public static final String SWITCH_TO_PASSIVE_SERVICE = "SWITCH_TO_PASSIVE_SERVICE";
     public static final String LOCATION_TYPE = "active";
     private static final String TAG = "ActiveLocationUpdateService";
     public static final String WAKE_LOCK_TAG = "WhereYouAt:ActiveLocServiceWakeLock";
@@ -47,13 +47,12 @@ public class ActiveLocationUpdateService extends Service implements LocationList
 
     // -= *************  Static ints  *********** =- //
     private static final int LOCATION_INTERVAL = 3000;
-    public static final int MAIN_NOTIFICATION_ID = 1000;
+    public static final int ACTIVE_LOC_SERVICE_NOTIFICATIONID = 1000;
 
     // -= ************* Static floats *********** =- //
     private static final float LOCATION_DISTANCE = 10f;
 
     private static long lastUpdatedServerInMillis = 0;
-    private static Location lastKnownRawLocation;
     public static boolean awaitingServerResponse = false;
 
     // endregion
@@ -64,10 +63,6 @@ public class ActiveLocationUpdateService extends Service implements LocationList
     private LocationManager mLocationManager;
     public static boolean isRunning = false;
     public static String tripcode;
-    
-    public ActiveLocationUpdateService() {
-
-    }
 
 
 
@@ -86,10 +81,12 @@ public class ActiveLocationUpdateService extends Service implements LocationList
     
     private void releaseWakeLock() {
         // If a lock is held, release it.
-        if (wakeLock.isHeld()) {
-            wakeLock.release();
-            Log.i(TAG, "releaseWakeLock | Held wakelock was released.");
-            return;
+        if (wakeLock != null) {
+            if (wakeLock.isHeld()) {
+                wakeLock.release();
+                Log.i(TAG, "releaseWakeLock | Held wakelock was released.");
+                return;
+            }
         }
 
         Log.i(TAG, "releaseWakeLock | No held wakelock found, nothing to release.");
@@ -122,7 +119,7 @@ public class ActiveLocationUpdateService extends Service implements LocationList
 
                 // Start the passive service
                 Log.w(TAG, "onStartCommand: Starting the passive service!");
-                Intent startPassive = new Intent(this, PassiveLocationUpdateService.class);
+                Intent startPassive = new Intent(this, LocationTrackingService.class);
                 startPassive.putExtra(TRIPCODE, tripcode);
                 startService(startPassive);
 
@@ -130,11 +127,14 @@ public class ActiveLocationUpdateService extends Service implements LocationList
                 stopSelf();
 
                 return super.onStartCommand(intent, flags, startId);
-            } else {
-                Log.w(TAG, " !!!!!!! -= onStartCommand STOPPING ALL SERVICES APPARENTLY! =- !!!!!!!");
-                stopSelf();
-                AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType.SERVER_TRIP_STOPPED);
             }
+        } else if (intent.getBooleanExtra(STOP_SERVICE_OUTRIGHT, false)) {
+            if (isRunning) {
+                AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType.SERVER_TRIP_STOPPED);
+                Log.w(TAG, " !!!!!!! -= onStartCommand | STOPPING SERVICE OUTRIGHT =- !!!!!!!");
+                stopSelf();
+            }
+            return super.onStartCommand(intent, flags, startId);
         }
 
         // Get a wake lock
@@ -150,13 +150,11 @@ public class ActiveLocationUpdateService extends Service implements LocationList
         // Start paying attention to device's location
         startListeningForLocationUpdates();
 
-        // Build the notification required for a foreground service
-        Notification notification = StaticHelpers.Notifications.showNotification(this,
-                "WhereYouAt is Running!", "Your location is actively being monitored " +
-                        "and transmitted to your group members.", 0);
+        MyNotificationManager notificationManager = new MyNotificationManager();
+        notificationManager.showLowPriorityNotification();
 
         // Formally start as a foreground service
-        startForeground(MAIN_NOTIFICATION_ID, notification);
+        startForeground(ACTIVE_LOC_SERVICE_NOTIFICATIONID, notificationManager.mLowNotification);
 
         // Flip the running flag to true.
         isRunning = true;
@@ -217,7 +215,7 @@ public class ActiveLocationUpdateService extends Service implements LocationList
 
         // Save this local location to the local locations table
         LocalUserLocation localUserLocation = new LocalUserLocation(location);
-        Log.i(TAG, "onLocationChanged | " + localUserLocation.saveToLocalDb());
+        Log.i(TAG, "onLocationChanged Saving location to local db: | " + localUserLocation.saveToLocalDb());
 
         // Locally broadcast the local location change just detected.
         Log.w(TAG, "onLocationChanged | Provider: " + location.getProvider() + " - "
@@ -226,8 +224,8 @@ public class ActiveLocationUpdateService extends Service implements LocationList
         // Send the local location as a broadcast to anyone with ears to hear.
         AppBroadcastHelper.sendGeneralBroadcast(LOCATION_CHANGED_LOCALLY, location);
 
-        // Update the volatile last known location
-        lastKnownRawLocation = location;
+        // Update the global last known location
+        MyApp.setLastKnownLocation(location);
 
         // It can be nice to know what location provider was used to produce this location.
         if (location.getProvider().equals(LocationManager.GPS_PROVIDER)) {
@@ -301,6 +299,7 @@ public class ActiveLocationUpdateService extends Service implements LocationList
         request.arguments.add(new Requests.Arguments.Argument("lon", location.getLongitude()));
         request.arguments.add(new Requests.Arguments.Argument("accuracy", location.getAccuracy()));
         request.arguments.add(new Requests.Arguments.Argument("active/passive", LOCATION_TYPE));
+        request.arguments.add(new Requests.Arguments.Argument("velocity", location.getSpeed()));
 
         WebApi api = new WebApi();
         api.makeRequest(request, new WebApi.WebApiResultListener() {

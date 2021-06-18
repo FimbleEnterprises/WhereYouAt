@@ -20,4 +20,19 @@
     <string name="action_signinorout">sign in/out bitch</string>
     <string name="not_in_trip_msg">Not currently in a group.</string>
     <string name="service_status">Service is not currently running</string>
+
+    <!-- NOTIFICATION CHANNEL STUFF -->
+    <string name="low_priority_notification_channel_name">com.fimbleenterprises.whereuat.low_priority_notification_channel_name</string>
+    <string name="low_priority_notification_channel_description">com.fimbleenterprises.whereuat.low_priority_notification_channel_description</string>
+    <string name="high_priority_notification_channel_name">com.fimbleenterprises.whereuat.high_priority_notification_channel_name</string>
+    <string name="high_priority_notification_channel_description">com.fimbleenterprises.whereuat.high_priority_notification_channel_description</string>
+    <string name="member_options_add_to_contacts">Add to contacts...</string>
+    <string name="member_options_view_on_map">View on map</string>
+    <string name="member_options_call">Call...</string>
+    <string name="member_options_request_loc_update">Request updated location</string>
+    <string name="member_options_message">Send message...</string>
+    <string name="enter_trip_code_hint">Enter code</string>
+    <string name="join_button_text">Join</string>
+    <string name="cancel_button_text">Cancel</string>
+    <string name="send_message_button_text">Send</string>
 </resources>

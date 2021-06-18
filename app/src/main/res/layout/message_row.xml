@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/row"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="5dp">
+
+    <ImageView
+        android:id="@+id/imgAvatar"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_below="@id/txtName"
+        android:layout_centerVertical="false"
+        tools:srcCompat="@tools:sample/avatars" />
+
+
+    <TextView
+        android:id="@+id/txtMsg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/txtDate"
+        android:layout_marginLeft="10dp"
+        android:layout_toRightOf="@id/imgAvatar"
+        android:text="Some message here."
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/txtDate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/txtName"
+        android:layout_marginLeft="10dp"
+        android:layout_toRightOf="@id/imgAvatar"
+        android:ems="10"
+        android:gravity="start|top"
+        android:text="1/12/2001 3:42"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/txtName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="start|top"
+        android:text="John Doe"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+
+
+
+
+
+
+
+
+
+</RelativeLayout>

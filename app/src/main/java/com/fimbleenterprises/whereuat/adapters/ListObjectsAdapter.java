@@ -10,14 +10,14 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import com.fimbleenterprises.whereuat.R;
-import com.fimbleenterprises.whereuat.generic_objs.BasicObjects;
-import com.fimbleenterprises.whereuat.preferences.MySettingsHelper;
+import com.fimbleenterprises.whereuat.generic_objs.ListObjects;
+import com.fimbleenterprises.whereuat.helpers.MySettingsHelper;
 
 import androidx.recyclerview.widget.RecyclerView;
 
-public class BasicObjectsAdapter extends RecyclerView.Adapter<BasicObjectsAdapter.ViewHolder> {
+public class ListObjectsAdapter extends RecyclerView.Adapter<ListObjectsAdapter.ViewHolder> {
     private static final String TAG="TripListRecyclerAdapter";
-    public BasicObjects mData;
+    public ListObjects mData;
     private LayoutInflater mInflater;
     private OnBasicObjectClickListener mClickListener;
     private OnBasicObjectLongClickListener mLongClickListener;
@@ -30,15 +30,15 @@ public class BasicObjectsAdapter extends RecyclerView.Adapter<BasicObjectsAdapte
     ImageView imgLeftIcon;
 
     public interface OnBasicObjectClickListener {
-        void onBasicObjectItemClicked(BasicObjects.BasicObject basicObject);
+        void onBasicObjectItemClicked(ListObjects.ListObject listObject);
     }
 
     public interface OnBasicObjectLongClickListener {
-        void onBasicItemLongClicked(BasicObjects.BasicObject basicObject);
+        void onBasicItemLongClicked(ListObjects.ListObject listObject);
     }
 
     // data is passed into the constructor
-    public BasicObjectsAdapter(Context context, BasicObjects data) {
+    public ListObjectsAdapter(Context context, ListObjects data) {
         this.mInflater = LayoutInflater.from(context);
         this.mData = data;
         this.context = context;
@@ -46,7 +46,7 @@ public class BasicObjectsAdapter extends RecyclerView.Adapter<BasicObjectsAdapte
     }
 
     // data is passed into the constructor
-    public BasicObjectsAdapter(Context context, BasicObjects data, OnBasicObjectClickListener clickListener) {
+    public ListObjectsAdapter(Context context, ListObjects data, OnBasicObjectClickListener clickListener) {
         this.mInflater = LayoutInflater.from(context);
         this.mData = data;
         this.context = context;
@@ -55,8 +55,8 @@ public class BasicObjectsAdapter extends RecyclerView.Adapter<BasicObjectsAdapte
     }
 
     // data is passed into the constructor
-    public BasicObjectsAdapter(Context context, BasicObjects data, OnBasicObjectClickListener clickListener,
-                                OnBasicObjectLongClickListener longClickListener) {
+    public ListObjectsAdapter(Context context, ListObjects data, OnBasicObjectClickListener clickListener,
+                              OnBasicObjectLongClickListener longClickListener) {
         this.mInflater = LayoutInflater.from(context);
         this.mData = data;
         this.context = context;
@@ -80,7 +80,7 @@ public class BasicObjectsAdapter extends RecyclerView.Adapter<BasicObjectsAdapte
     // binds the data to the TextView in each row
     @Override
     public void onBindViewHolder(final ViewHolder holder, final int position) {
-        final BasicObjects.BasicObject object = mData.list.get(position);
+        final ListObjects.ListObject object = mData.list.get(position);
 
         if (object.isSeparator) {
             holder.txtMainText.setText(object.title);
@@ -105,7 +105,7 @@ public class BasicObjectsAdapter extends RecyclerView.Adapter<BasicObjectsAdapte
     }
 
     // convenience method for getting data at click position
-    public BasicObjects.BasicObject getItem(int pos) {
+    public ListObjects.ListObject getItem(int pos) {
         return mData.list.get(pos);
     }
 
@@ -146,7 +146,7 @@ public class BasicObjectsAdapter extends RecyclerView.Adapter<BasicObjectsAdapte
         @Override
         public void onClick(View view) {
 
-            BasicObjects.BasicObject clickedItem = mData.list.get(getAdapterPosition());
+            ListObjects.ListObject clickedItem = mData.list.get(getAdapterPosition());
 
             if (clickedItem.isSeparator) {
                 return;
@@ -158,7 +158,7 @@ public class BasicObjectsAdapter extends RecyclerView.Adapter<BasicObjectsAdapte
 
         @Override
         public boolean onLongClick(View view) {
-            BasicObjects.BasicObject clickedItem = mData.list.get(getAdapterPosition());
+            ListObjects.ListObject clickedItem = mData.list.get(getAdapterPosition());
             if (clickedItem.isSeparator) {
                 return true;
             }

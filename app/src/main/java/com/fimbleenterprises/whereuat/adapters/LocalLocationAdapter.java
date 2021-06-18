@@ -9,7 +9,7 @@ import android.widget.TextView;
 
 import com.fimbleenterprises.whereuat.R;
 import com.fimbleenterprises.whereuat.local_database.LocalUserLocation;
-import com.fimbleenterprises.whereuat.preferences.MySettingsHelper;
+import com.fimbleenterprises.whereuat.helpers.MySettingsHelper;
 
 import java.util.ArrayList;
 

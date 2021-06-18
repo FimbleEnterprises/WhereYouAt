@@ -2,32 +2,25 @@ package com.fimbleenterprises.whereuat.services;
 
 import android.Manifest;
 import android.app.AlarmManager;
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.BitmapFactory;
-import android.graphics.Color;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
 import android.widget.Toast;
 
 import com.fimbleenterprises.whereuat.AppBroadcastHelper;
-import com.fimbleenterprises.whereuat.MainActivity;
 import com.fimbleenterprises.whereuat.MyApp;
-import com.fimbleenterprises.whereuat.R;
-import com.fimbleenterprises.whereuat.StaticHelpers;
+import com.fimbleenterprises.whereuat.helpers.StaticHelpers;
 import com.fimbleenterprises.whereuat.googleuser.GoogleUser;
+import com.fimbleenterprises.whereuat.helpers.MyNotificationManager;
 import com.fimbleenterprises.whereuat.local_database.LocalUserLocation;
 import com.fimbleenterprises.whereuat.local_database.TripReport;
 import com.fimbleenterprises.whereuat.rest_api.Requests;
@@ -40,12 +33,12 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import org.joda.time.DateTime;
 
 import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
 
-public class PassiveLocationUpdateService extends Service {
-    
+public class LocationTrackingService extends Service {
+
+    public static final String STOP_SERVICE_OUTRIGHT = "STOP_SERVICE_OUTRIGHT";
+    public static final String MAP_FRAG_SUPPLIED_A_LOCATION = "MAP_FRAG_SUPPLIED_A_LOCATION";
     public static final String SWITCH_TO_ACTIVE_SERVICE = "SWITCH_TO_ACTIVE_SERVICE";
-    
     public static final int NEXT_LOCATION_REQUEST_CODE = 77747774;
     public static final String LOCATION_TYPE = "passive";
     public static final String TRIPCODE = "TRIPCODE";
@@ -58,12 +51,11 @@ public class PassiveLocationUpdateService extends Service {
     private static PendingIntent pendingIntent = null;
     public static AlarmManager alarmManager = null;
     public static boolean awaitingServerResponse = false;
-    public static Location lastKnownLocation;
+    // public static Location lastKnownLocation;
     public static long lastUpdatedServerInMillis = 0;
-    public static final String STOP_SERVICE = "STOP_SERVICE";
     public static boolean isRunning = false;
 
-    public PassiveLocationUpdateService() {
+    public LocationTrackingService() {
         this.context = this;
     }
 
@@ -81,27 +73,37 @@ public class PassiveLocationUpdateService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.w(TAG, "onStartCommand: Service is starting!");
 
-        if (intent.hasExtra(SWITCH_TO_ACTIVE_SERVICE)) {
-            Log.w(TAG, " !!!!!!! -= onStartCommand | Switching to active service =- !!!!!!!");
-
-            Log.w(TAG, "onStartCommand: Requesting the active service be started!");
-            if (intent.getBooleanExtra(SWITCH_TO_ACTIVE_SERVICE, false)) {
-                Intent startIntent = new Intent(this, ActiveLocationUpdateService.class);
-                startForegroundService(startIntent);
-
-                Log.w(TAG, "onStartCommand: Stopping the passive service with stopSelf()");
-                stopSelf();
-
-                // Leave the method returning the super - we done here.
+        if (intent.getBooleanExtra(MAP_FRAG_SUPPLIED_A_LOCATION, false)) {
+            Log.e(TAG, "onStartCommand | MAP FRAG SUPPLIED A LOCATION!");
+            // The map frag supplied a location - we can retrieve it from the app-wide location var
+            // and do something with it.
+            if (MyApp.isReportingLocation()) {
+                Log.e(TAG, "The service is running - will force an immediate server location update");
+                PassiveLocationAlarmReceiver.updateServerLocation(MyApp.getLastKnownLocation());
                 return super.onStartCommand(intent, flags, startId);
-            } else {
-                Log.w(TAG, " !!!!!!! -= onStartCommand | STOPPING ALL SERVICES APPARENTLY! =- !!!!!!!");
-                stopSelf();
-                AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType.SERVER_TRIP_STOPPED);
             }
         }
-        
-        AlarmReceiver.setNextAlarm();
+
+        if (intent.getBooleanExtra(STOP_SERVICE_OUTRIGHT, false)) {
+            if (isRunning) {
+                stopSelf();
+                AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType.SERVER_TRIP_STOPPED);
+                Log.w(TAG, " !!!!!!! -= onStartCommand | STOPPING SERVICE OUTRIGHT =- !!!!!!!");
+            }
+            return super.onStartCommand(intent, flags, startId);
+        }
+
+        getLastKnownDeviceLocation(new InstantLocationListener() {
+            @Override
+            public void onLocationReceived(LocalUserLocation location) {
+                Log.i(TAG, "onLocationReceived | Initial location received - service is running.");
+                // Send a broadcast stating the local user's location has changed in case there is a caller that cares.
+                AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType
+                        .LOCATION_CHANGED_LOCALLY, location.toCrudeLocation());
+            }
+        });
+
+        PassiveLocationAlarmReceiver.setNextAlarm();
 
         if (intent == null || intent.getStringExtra(TRIPCODE) == null) {
             try {
@@ -113,19 +115,17 @@ public class PassiveLocationUpdateService extends Service {
 
         tripcode = intent.getStringExtra(TRIPCODE);
 
-        // Build the notification required for a foreground service
-        Notification notification = StaticHelpers.Notifications.showNotification(this,
-                "WhereYouAt is Running!", "Your location is passively being monitored " +
-                        "and transmitted to your group members.", 0);
+        MyNotificationManager myNotificationManager = new MyNotificationManager();
+        myNotificationManager.showLowPriorityNotification();
 
         // Formally start as a foreground service
-        startForeground(MAIN_NOTIFICATION_ID, notification);
+        startForeground(MAIN_NOTIFICATION_ID, myNotificationManager.mLowNotification);
 
         isRunning = true;
 
         MyApp.setIsPendingCancel(false);
 
-        AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType.PASSIVE_LOCATION_SERVICE_STARTED);
+        AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType.LOCATION_TRACKING_SERVICE_STARTED);
 
         return super.onStartCommand(intent, flags, startId);
     }
@@ -143,11 +143,14 @@ public class PassiveLocationUpdateService extends Service {
 
     }
 
-    public static class AlarmReceiver extends BroadcastReceiver {
+    public static void getLastKnownDeviceLocation(InstantLocationListener listener) {
+        PassiveLocationAlarmReceiver.getMyLastKnownLocation(listener);
+    }
+
+    public static class PassiveLocationAlarmReceiver extends BroadcastReceiver {
 
         public static final int BG_PERMISSION_REQUEST_NOTIFICATION = 88;
         public static final String BG_PERMISSION_REQUEST_NOTIF = "BG_PERMISSION_REQUEST_NOTIF";
-        private NotificationManager mNotificationManager;
 
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -161,23 +164,18 @@ public class PassiveLocationUpdateService extends Service {
                     // Get and do something with the last known location
                     getMyLastKnownLocation();
                 } else {
-                    if (StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_BACKGROUND_LOCATION)) {
+                    if (StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType
+                            .ACCESS_BACKGROUND_LOCATION)) {
                         getMyLastKnownLocation();
                     } else {
-                        Notification notification = showNotification(
-                                context, "Background Location", "We need to change " +
-                                        "the app's permissions to allow background location monitoring " +
-                                        "in order to share your location with the members of this group!\n\n" +
-                                        "Click here to allow the permission!", NotificationManager
-                                        .IMPORTANCE_MAX);
-                        Log.w(TAG, "onReceive: APP IN BG - NO PERMS - NEED DO SOME");
-                        mNotificationManager.notify(BG_PERMISSION_REQUEST_NOTIFICATION, notification);
+                        // todo Make a notification alerting a grievous permission problem!
                     }
                 }
 
             }
             catch (Exception e) {
-                Toast.makeText(context, "There was an error somewhere, but we still received an alarm", Toast.LENGTH_SHORT).show();
+                Toast.makeText(context, "There was an error somewhere, but we still received " +
+                        "an alarm", Toast.LENGTH_SHORT).show();
                 e.printStackTrace();
             }
 
@@ -190,13 +188,17 @@ public class PassiveLocationUpdateService extends Service {
             Log.w("", "setNextAlarm:                  SETTING NEXT ALARM!                ");
             Log.w("", "setNextAlarm: *****************************************************");
 
-            alarmIntent = new Intent ( context, AlarmReceiver.class );
-            pendingIntent = PendingIntent.getBroadcast( MyApp.getAppContext().getApplicationContext(), NEXT_LOCATION_REQUEST_CODE, alarmIntent, 0 );
+            alarmIntent = new Intent ( context, PassiveLocationAlarmReceiver.class );
+            pendingIntent = PendingIntent.getBroadcast( MyApp.getAppContext().getApplicationContext()
+                    , NEXT_LOCATION_REQUEST_CODE, alarmIntent, 0 );
             alarmManager = ( AlarmManager ) MyApp.getAppContext().getSystemService( ALARM_SERVICE );
-            alarmManager.setExact(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + CHECK_FREQUENCY, pendingIntent);
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, System.currentTimeMillis()
+                    + CHECK_FREQUENCY, pendingIntent);
         }
 
         public static void getMyLastKnownLocation(InstantLocationListener listener) {
+
+            context = MyApp.getAppContext();
 
             Log.w(TAG, "onReceive: Querying last known location now...");
 
@@ -206,55 +208,78 @@ public class PassiveLocationUpdateService extends Service {
                 ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION);
             }
             Location location = locationManager.getLastKnownLocation(locationManager.getBestProvider(criteria, false));
+
+            MyApp.setLastKnownLocation(location);
+
+            // If location is null we leave.
+            if (location == null) {
+                return;
+            }
 
             // Save this location to the database
             LocalUserLocation localUserLocation = new LocalUserLocation(location);
             localUserLocation.saveToLocalDb();
             listener.onLocationReceived(localUserLocation);
             Log.i(TAG, "onLocationChanged | " + localUserLocation.saveToLocalDb());
+
+            setMyLastLocation();
         }
 
-        public void getMyLastKnownLocation() {
+        private static void getMyLastKnownLocation() {
 
             Log.w(TAG, "onReceive: Querying last known location now...");
 
             // Get the location manager service
             LocationManager locationManager = (LocationManager) context.getSystemService(LOCATION_SERVICE);
             Criteria criteria = new Criteria();
-            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION);
             }
 
+            // Okay, this is hacky - if the map fragment is visible and the map is ready and showing the
+            // cute little blue, location dot we want to get THAT location because it is just downright better!
+            if (MyApp.isMapFragVisible()) {
+                Log.w(TAG, "getMyLastKnownLocation: | WE ARE NOT GOING TO USE THE FUSED LOC PROVIDER!  WE ARE GOING TO USE THE MAP FRAG'S LOCATION SINCE IT IS CURRENTLY SHOWING!");
+                updateServerLocation(MyApp.getLastKnownLocation());
+                return;
+            }
+
             // Try to get the device's last known location
-            Location location = locationManager.getLastKnownLocation(locationManager.getBestProvider(criteria, false));
+            Location location = locationManager.getLastKnownLocation(locationManager
+                    .getBestProvider(criteria, true));
 
             // If we have a valid location then we can update the server with that location
             if (location != null) {
+
                 Log.i(TAG, "getMyLastKnownLocation There is a cached location here!");
                 double lat = location.getLatitude();
                 double longi = location.getLongitude();
-                LatLng latLng = new LatLng(lat,longi);
-                Log.w(TAG, "getMyLastKnownLocation: Provider: " + location.getProvider() + ", Lat: " + lat + ", long: " + longi);
-                updateServerLocation(location);
-            } else {
-                Log.w(TAG, "getMyLastKnownLocation: No cached location found - will have to spin up the sensors...");
-                setMyLastLocation();
-            }
 
-            if (location != null) {
+                Log.w(TAG, "getMyLastKnownLocation: Provider: " + location.getProvider() + "," +
+                        " Lat: " + lat + ", long: " + longi);
+                updateServerLocation(location);
+
                 // Update the static lastKnonLoc
-                lastKnownLocation = location;
+                MyApp.setLastKnownLocation(location);
 
                 // Send a broadcast stating the local user's location has changed in case there is a caller that cares.
-                AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType.LOCATION_CHANGED_LOCALLY, location);
+                AppBroadcastHelper.sendGeneralBroadcast(AppBroadcastHelper.BroadcastType
+                        .LOCATION_CHANGED_LOCALLY, location);
 
                 // Save this local location to the local locations table
                 LocalUserLocation localUserLocation = new LocalUserLocation(location);
                 Log.i(TAG, "onLocationChanged | " + localUserLocation.saveToLocalDb());
+
+            } else {
+                Log.w(TAG, "getMyLastKnownLocation: No cached location found - will have to " +
+                        "spin up the sensors...");
+                setMyLastLocation();
             }
+
         }
 
-        private void setMyLastLocation() {
+        private static void setMyLastLocation() {
             Log.d(TAG, "setMyLastLocation: excecute, and get last location");
             FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
             if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -264,7 +289,7 @@ public class PassiveLocationUpdateService extends Service {
             }
 
             if (!StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_BACKGROUND_LOCATION)) {
-
+                return;
             }
 
             fusedLocationClient.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() {
@@ -283,63 +308,6 @@ public class PassiveLocationUpdateService extends Service {
             });
         }
 
-        private Notification showNotification(Context context, String title, String contentText, int importance) {
-            NotificationCompat.Builder mBuilder =
-                    new NotificationCompat.Builder(context.getApplicationContext(), "22");
-
-            Intent i = new Intent(context.getApplicationContext(), MainActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            i.putExtra(BG_PERMISSION_REQUEST_NOTIF, true);
-            i.setAction(BG_PERMISSION_REQUEST_NOTIF);
-
-            Intent ii = new Intent(context.getApplicationContext(), MainActivity.class);
-            ii.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            i.putExtra(BG_PERMISSION_REQUEST_NOTIF + "ii", true);
-            i.setAction(BG_PERMISSION_REQUEST_NOTIF + "ii");
-
-            PendingIntent pendingIntent = PendingIntent.getActivity(context.getApplicationContext(), BG_PERMISSION_REQUEST_NOTIFICATION, i
-                    , PendingIntent.FLAG_UPDATE_CURRENT);
-
-
-            PendingIntent stopTripIntent = PendingIntent.getActivity(context.getApplicationContext(), BG_PERMISSION_REQUEST_NOTIFICATION
-                    , ii, PendingIntent.FLAG_UPDATE_CURRENT);
-
-            mBuilder.setContentIntent(pendingIntent);
-            mBuilder.setOngoing(true);
-            mBuilder.setSmallIcon(R.drawable.ic_menu_camera);
-            mBuilder.setContentTitle(title);
-            mBuilder.setContentText(contentText);
-            mBuilder.addAction(R.drawable.ic_menu_gallery, "some action",
-                    stopTripIntent);
-
-            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                mBuilder.setSmallIcon(R.drawable.ic_menu_gallery);
-                mBuilder.setLargeIcon(BitmapFactory.decodeResource(context.getResources(), R.mipmap.ic_launcher_round));
-                mBuilder.setColor(Color.WHITE);
-            } else {
-                Log.i(TAG, "getNotification ");
-            }
-
-            mNotificationManager = (NotificationManager) context.getApplicationContext()
-                    .getSystemService(context.getApplicationContext().NOTIFICATION_SERVICE);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                String channelId = "22";
-                NotificationChannel channel = new NotificationChannel(
-                        channelId,
-                        "WHEREYOUAT",
-                        importance);
-                mNotificationManager.createNotificationChannel(channel);
-                mBuilder.setChannelId(channelId);
-            }
-
-            Notification notif = mBuilder.build();
-
-            notif.flags = Notification.FLAG_ONGOING_EVENT;
-
-            return notif;
-        }
-
         /**
          * Sends our local location to the server.  The server returns all member's most recent locations
          * as far as it knows (including the one we just sent, obviously).  The server will also send an
@@ -347,7 +315,7 @@ public class PassiveLocationUpdateService extends Service {
          * FCM message receiver.
          * @param location
          */
-        private void updateServerLocation(Location location) {
+        public static void updateServerLocation(Location location) {
 
             awaitingServerResponse = true;
 
@@ -358,6 +326,7 @@ public class PassiveLocationUpdateService extends Service {
             request.arguments.add(new Requests.Arguments.Argument("lon", location.getLongitude()));
             request.arguments.add(new Requests.Arguments.Argument("accuracy", location.getAccuracy()));
             request.arguments.add(new Requests.Arguments.Argument("passive/active", LOCATION_TYPE));
+            request.arguments.add(new Requests.Arguments.Argument("velocity", location.getSpeed()));
 
             WebApi api = new WebApi();
             api.makeRequest(request, new WebApi.WebApiResultListener() {
