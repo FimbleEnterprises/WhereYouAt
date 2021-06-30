@@ -1,7 +1,9 @@
 package com.fimbleenterprises.whereuat;
 
-import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -17,8 +19,7 @@ import com.fimbleenterprises.whereuat.helpers.MyNotificationManager;
 import com.fimbleenterprises.whereuat.helpers.StaticHelpers;
 // import com.fimbleenterprises.whereuat.services.ActiveLocationUpdateService;
 import com.fimbleenterprises.whereuat.local_database.TripDatasource;
-import com.fimbleenterprises.whereuat.services.LocationTrackingService;
-import com.fimbleenterprises.whereuat.ui.home.MainPager;
+import com.fimbleenterprises.whereuat.ui.LoginActivity;
 import com.fimbleenterprises.whereuat.ui.other.NotSignedInActivity;
 import com.fimbleenterprises.whereuat.ui.other.PermissionsActivity;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -29,7 +30,6 @@ import java.util.ArrayList;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.navigation.NavController;
-import androidx.navigation.NavDeepLinkBuilder;
 import androidx.navigation.Navigation;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
@@ -37,15 +37,21 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
-public class MainActivity extends AppCompatActivity implements DrawerLayout.DrawerListener {
+public class MainActivity extends AppCompatActivity implements DrawerLayout.DrawerListener,
+                                                               NavigationView.OnNavigationItemSelectedListener {
 
     private static final String TAG = "MainActivity";
     private AppBarConfiguration mAppBarConfiguration;
+    public static final String BACK_PRESS = "BACK_PRESS";
 
     public static final String FLOATING_BUTTON_CLICKED = "FLOATING_BUTTON_CLICKED";
 
+    BroadcastReceiver mainAppBroadcastReceiver;
+
+
     // These flags will prevent circular logic when resuming the app and their respective
     // conditions are not met.
+    NavigationView navView;
     public static boolean shouldShowSignIn = true;
     public static boolean shouldRequestPermissions = true;
     public DrawerLayout drawer;
@@ -76,14 +82,20 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
         drawer.addDrawerListener(this);
 
         // Fuck this nav view.  I just don't get it!  Shit works but don't fuck with it or it may stop working!
-        NavigationView navigationView = findViewById(R.id.nav_view);
+        navView = findViewById(R.id.nav_view);
+
+
+
         mAppBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.nav_home)
                 .setDrawerLayout(drawer)
                 .build();
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
-        NavigationUI.setupWithNavController(navigationView, navController);
+        // NavigationUI.setupWithNavController(navView, navController);
+
+        // Check the overrides region for this event handler
+        navView.setNavigationItemSelectedListener(this);
 
         // Check if we are here due to the user clicking the new message received notification
         if (getIntent() != null &&
@@ -113,9 +125,168 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
             MyApp.setNewMessagePending(true);
         }
 
+
+
+        buildDrawer();
+
+        mainAppBroadcastReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                // Main app broadcasts always have a serializable extra that can be cast to a BroadcastType
+                // object.  Here we switch based on the type.
+                AppBroadcastHelper.BroadcastType broadcastType = (AppBroadcastHelper.BroadcastType)
+                        intent.getSerializableExtra(AppBroadcastHelper.BROADCAST_TYPE);
+
+                Log.i(TAG, "onReceive | MainActivity received a main app broadcast of type: " + broadcastType.name());
+
+                // Remember that the buildDrawer method will not make changes if the drawer is open.
+                buildDrawer();
+
+                switch (broadcastType) {
+                    case LOCATION_CHANGED_LOCALLY:
+                        break;
+                    case SERVER_TRIP_STOPPED:
+                        break;
+                    case USER_JOINED_TRIP:
+                        break;
+                    case USER_LEFT_TRIP:
+                        break;
+                    case SERVER_LOCATION_UPDATED:
+                        break;
+                    case SERVER_TRIP_STARTED:
+                        break;
+                    case PAGE_CHANGED:
+                        break;
+                    case USER_MARKER_CLICKED:
+                        break;
+                    case MESSAGE_RECEIVED:
+                        break;
+                    case LOCATION_TRACKING_SERVICE_STARTED:
+                        break;
+                }
+            }
+        };
+
+    }
+
+    void buildDrawer() {
+        
+        if (drawer.isOpen()) {
+            Log.i(TAG, "buildDrawer | Drawer is open - will not modify it while open.  Leaving.");
+            return;
+        }
+        
+        if (navView.getMenu().size() == 2) {
+            
+        }
+        
+        MenuItem joinCreateLeaveMenuItem = navView.getMenu().getItem(1);
+        if (MyApp.isReportingLocation()) {
+            joinCreateLeaveMenuItem.setTitle("Leave trip");
+        } else {
+            joinCreateLeaveMenuItem.setTitle("Join/Create trip");
+        }
     }
 
     // region OTHER OVERRIDES
+    @Override
+    protected void onPause() {
+    Log.i(TAG, " !!!!!!! -= onPause  =- !!!!!!!");
+    MyApp.activityPaused();
+
+    // Check if location is currently being tracked - if so, stop the active tracker and start
+    // the passive.
+    if (MyApp.isReportingLocation()) {
+
+    Log.w(TAG, "onPause | App is pausing.  Will kill the active service and start the passive service...");
+
+    /*if (ActiveLocationUpdateService.isRunning) {
+    // Stop the active service
+    Intent stopIntent = new Intent(this, ActiveLocationUpdateService.class);
+    stopIntent.putExtra(ActiveLocationUpdateService.SWITCH_TO_PASSIVE_SERVICE, true);
+    startForegroundService(stopIntent);
+    } else if (PassiveLocationUpdateService.isRunning) {
+    // Stop the passive service
+    Intent stopIntent = new Intent(this, PassiveLocationUpdateService.class);
+    stopIntent.putExtra(PassiveLocationUpdateService.SWITCH_TO_ACTIVE_SERVICE, true);
+    startForegroundService(stopIntent);
+    }*/
+
+    }
+
+    // Unregister the main broadcast receiver
+    this.unregisterReceiver(mainAppBroadcastReceiver);
+
+    super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        Log.i(TAG, " !!!!!!! -= onResume  =- !!!!!!!");
+        super.onResume();
+        MyApp.activityResumed();
+
+        // Check if the user is signed in and whether or not the flag allows us to ask them to sign in if not.
+        if (!MyGoogleSignInHelper.isSignedIn(this) && shouldShowSignIn) {
+        MyGoogleSignInHelper.showSignInActivity(this);
+        } else if (MyGoogleSignInHelper.isSignedIn(this)) { // User is signed in!
+        // Now check permissions, ugh.
+        if (StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_BACKGROUND_LOCATION) &&
+            StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_BACKGROUND_LOCATION) &&
+            StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_BACKGROUND_LOCATION)) {
+        // Has all permissions!  Resume the app!
+        super.onResume();
+        } else if (StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_FINE_LOCATION) &&
+            StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_COARSE_LOCATION)) {
+        super.onResume();
+        Toast.makeText(this, "Background location not granted.  It'll still work, just not nearly as cool", Toast.LENGTH_SHORT).show();
+        } else { // User lacks permissions - see if the flag allows pestering them to remedy that.
+        if (!shouldRequestPermissions) {
+            // Give up and close.
+            finish();
+            shouldRequestPermissions = true;
+        } else {
+            // Give the user the opportunity to rectify the perm problem.
+            Intent intent = new Intent(this, PermissionsActivity.class);
+            startActivityForResult(intent, PermissionsActivity.REQUEST_PERMS);
+        }
+        }
+
+        super.onResume();
+        } else {
+        // Allow the sign in dialog the next time we get to onResume()
+        shouldShowSignIn = true;
+        // Finish the activity without fanfare.
+        finish();
+        }
+
+        // Do FCM validation with all of the fucking callbacks!
+        MyFcmHelper.getNewToken(new MyFcmHelper.RequestFcmTokenListener() {
+        @Override
+        public void onSuccess(String token) {
+        Log.i(TAG, "onSuccess | Fcm token was received from Google!");
+        }
+
+        @Override
+        public void onFailure(String msg) {
+        Log.w(TAG, "onFailure: | Fcm token was not received from Google!  Error:\n" + msg);
+        }
+        }, new MyFcmHelper.UpsertFcmListener() {
+        @Override
+        public void onSuccess() {
+        Log.i(TAG, "onSuccess | Fcm token was upserted to our server!");
+        }
+
+        @Override
+        public void onFailure(String msg) {
+        Log.w(TAG, "onFailure: | Fcm token was not upserted!  Error:\n" + msg);
+        }
+        });
+
+        // Register the main app receiver.
+        registerReceiver(mainAppBroadcastReceiver, new IntentFilter(AppBroadcastHelper.GLOBAL_BROADCAST));
+
+    }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
@@ -130,26 +301,7 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
                 return true;
             }
 
-            // Check if a trip is running
-            if (MyApp.isReportingLocation()) {
-                switch (MainPager.mViewPager.getCurrentItem()) {
-                    case MainPager.SectionsPagerAdapter.JOIN_CREATE:
-                        finish();
-                        break;
-                    case MainPager.SectionsPagerAdapter.VIEW_MEMBERS:
-                        MainPager.mViewPager.setCurrentItem(MainPager.SectionsPagerAdapter.JOIN_CREATE);
-                        break;
-                    case MainPager.SectionsPagerAdapter.VIEW_MAP:
-                        MainPager.mViewPager.setCurrentItem(MainPager.SectionsPagerAdapter.VIEW_MEMBERS);
-                        break;
-                }
-            } else {
-                if (MainPager.mViewPager.getCurrentItem() == MainPager.SectionsPagerAdapter.JOIN_CREATE) {
-                    finish();
-                } else {
-                    MainPager.mViewPager.setCurrentItem(MainPager.SectionsPagerAdapter.JOIN_CREATE);
-                }
-            }
+            sendBroadcast(new Intent(BACK_PRESS));
 
             return true;
         }
@@ -176,108 +328,6 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
         }
 
 
-
-    }
-
-    @Override
-    protected void onPause() {
-        Log.i(TAG, " !!!!!!! -= onPause  =- !!!!!!!");
-        MyApp.activityPaused();
-
-        // Check if location is currently being tracked - if so, stop the active tracker and start
-        // the passive.
-        if (MyApp.isReportingLocation()) {
-
-            Log.w(TAG, "onPause | App is pausing.  Will kill the active service and start the passive service...");
-
-            /*if (ActiveLocationUpdateService.isRunning) {
-                // Stop the active service
-                Intent stopIntent = new Intent(this, ActiveLocationUpdateService.class);
-                stopIntent.putExtra(ActiveLocationUpdateService.SWITCH_TO_PASSIVE_SERVICE, true);
-                startForegroundService(stopIntent);
-            } else if (PassiveLocationUpdateService.isRunning) {
-                // Stop the passive service
-                Intent stopIntent = new Intent(this, PassiveLocationUpdateService.class);
-                stopIntent.putExtra(PassiveLocationUpdateService.SWITCH_TO_ACTIVE_SERVICE, true);
-                startForegroundService(stopIntent);
-            }*/
-
-        }
-
-        super.onPause();
-    }
-
-    @Override
-    protected void onResume() {
-        Log.i(TAG, " !!!!!!! -= onResume  =- !!!!!!!");
-        super.onResume();
-        MyApp.activityResumed();
-
-        // Check if the user is signed in and whether or not the flag allows us to ask them to sign in if not.
-        if (!MyGoogleSignInHelper.isSignedIn(this) && shouldShowSignIn) {
-            MyGoogleSignInHelper.showSignInActivity(this);
-        } else if (MyGoogleSignInHelper.isSignedIn(this)) { // User is signed in!
-            // Now check permissions, ugh.
-            if (StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_BACKGROUND_LOCATION) &&
-                    StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_BACKGROUND_LOCATION) &&
-                    StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_BACKGROUND_LOCATION)) {
-                // Has all permissions!  Resume the app!
-                super.onResume();
-            } else if (StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_FINE_LOCATION) &&
-                    StaticHelpers.Permissions.isGranted(StaticHelpers.Permissions.PermissionType.ACCESS_COARSE_LOCATION)) {
-                super.onResume();
-                Toast.makeText(this, "Background location not granted.  It'll still work, just not nearly as cool", Toast.LENGTH_SHORT).show();
-            } else { // User lacks permissions - see if the flag allows pestering them to remedy that.
-                if (!shouldRequestPermissions) {
-                    // Give up and close.
-                    finish();
-                    shouldRequestPermissions = true;
-                } else {
-                    // Give the user the opportunity to rectify the perm problem.
-                    Intent intent = new Intent(this, PermissionsActivity.class);
-                    startActivityForResult(intent, PermissionsActivity.REQUEST_PERMS);
-                }
-            }
-
-            super.onResume();
-        } else {
-            // Allow the sign in dialog the next time we get to onResume()
-            shouldShowSignIn = true;
-            // Finish the activity without fanfare.
-            finish();
-        }
-
-        // Do FCM validation with all of the fucking callbacks!
-        MyFcmHelper.getNewToken(new MyFcmHelper.RequestFcmTokenListener() {
-            @Override
-            public void onSuccess(String token) {
-                Log.i(TAG, "onSuccess | Fcm token was received from Google!");
-            }
-
-            @Override
-            public void onFailure(String msg) {
-                Log.w(TAG, "onFailure: | Fcm token was not received from Google!  Error:\n" + msg);
-            }
-        }, new MyFcmHelper.UpsertFcmListener() {
-            @Override
-            public void onSuccess() {
-                Log.i(TAG, "onSuccess | Fcm token was upserted to our server!");
-            }
-
-            @Override
-            public void onFailure(String msg) {
-                Log.w(TAG, "onFailure: | Fcm token was not upserted!  Error:\n" + msg);
-            }
-        });
-
-        /*// If a trip is running, stop the passive location service and switch to the active one.
-        if (MyApp.isReportingLocation()) {
-            Log.i(TAG, "onResume | Requesting the passive be stopped and the active be started!");
-
-            Intent stopPassiveIntent = new Intent(this, LocationTrackingService.class);
-            stopPassiveIntent.putExtra(LocationTrackingService.SWITCH_TO_ACTIVE_SERVICE, true);
-            startService(stopPassiveIntent);
-        }*/
 
     }
 
@@ -348,7 +398,24 @@ public class MainActivity extends AppCompatActivity implements DrawerLayout.Draw
         Log.i(TAG, "onDrawerStateChanged | State: " + newState);
     }
 
-    // endregion
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+
+        Log.i(TAG, "onNavigationItemSelected | Selected: " + item.getTitle());
+
+        if (item.getItemId() == R.id.nav_join_create_leave) {
+            if (MyApp.isReportingLocation()) {
+                finishAndRemoveTask();
+                MyApp.stopAllLocationServices(true, this);
+
+            }
+        }
+
+        return false;
+    }
+
+
+// endregion
 
 
 }

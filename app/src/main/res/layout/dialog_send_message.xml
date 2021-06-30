@@ -52,7 +52,7 @@
                     android:layout_height="225dp"
                     android:ems="10"
                     android:gravity="start|top"
-                    android:inputType="textMultiLine"
+                    android:inputType="textShortMessage|textMultiLine|textCapSentences"
                     android:singleLine="false" />
 
             </FrameLayout>

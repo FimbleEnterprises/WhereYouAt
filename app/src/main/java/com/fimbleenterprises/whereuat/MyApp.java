@@ -14,6 +14,7 @@ import com.fimbleenterprises.whereuat.rest_api.Requests;
 import com.fimbleenterprises.whereuat.rest_api.WebApi;
 // import com.fimbleenterprises.whereuat.services.ActiveLocationUpdateService;
 import com.fimbleenterprises.whereuat.services.LocationTrackingService;
+import com.fimbleenterprises.whereuat.ui.LoginActivity;
 import com.fimbleenterprises.whereuat.ui.other.PermissionsActivity;
 import com.google.firebase.FirebaseApp;
 
@@ -224,7 +225,7 @@ public class MyApp extends Application {
 
     }
 
-    public static void stopAllLocationServices(boolean notifyServer, final Context context) {
+    public static void stopAllLocationServices(final boolean goToLogin, final Context context) {
 
         Log.w(TAG, " !!!!!!! -= stopAllLocationServices | STOPPING ALL LOCATION SERVICES! =- !!!!!!!");
 
@@ -245,6 +246,11 @@ public class MyApp extends Application {
                 if (results.list.get(0).wasSuccessful) {
                     Toast.makeText(context, "You have left the group!", Toast.LENGTH_SHORT).show();
                     Log.w(TAG, " !!!!!!! -= onSuccess | Left trip! =- !!!!!!!");
+
+                    if (goToLogin) {
+                        Intent intent = new Intent(context, LoginActivity.class);
+                        context.startActivity(intent);
+                    }
                 }
             }
 

@@ -15,7 +15,7 @@
         android:paddingTop="2dp">
 
         <TableRow
-            android:id="@+id/tableRow_0"
+            android:id="@+id/tableRow_header"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content">
 
@@ -25,11 +25,76 @@
                 android:layout_weight="1">
 
                 <TextView
-                    android:id="@+id/txtDebugText"
+                    android:id="@+id/txtFocusedUser"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="10 seconds until camera reset"
-                    android:textAlignment="center" />
+                    android:layout_marginLeft="5dp"
+                    android:layout_marginRight="5dp"
+                    android:background="@drawable/btn_glass_gray_black_border_toggle_orange_on"
+                    android:gravity="center"
+                    android:text="MATT WEBER"
+                    android:textAppearance="?android:attr/textAppearanceSmall"
+                    android:textColor="@color/colorPrimary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+        </TableRow>
+
+        <TableRow
+            android:id="@+id/tableRow_0"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight=".25">
+
+                <Button
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:text="overview"
+                    android:id="@+id/btnOverview" />
+
+            </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight=".25">
+
+                <Button
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:text="button1"
+                    android:id="@+id/btnButton1" />
+
+            </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight=".25">
+
+                <Button
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:text="button2"
+                    android:id="@+id/btnButton2" />
+
+            </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight=".25">
+
+                <Button
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:text="button3"
+                    android:id="@+id/btnButton3" />
 
             </FrameLayout>
         </TableRow>

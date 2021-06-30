@@ -161,6 +161,8 @@ public class FirebaseMessageReceiver extends FirebaseMessagingService {
                 Log.i(TAG, "onMessageReceived Sent an app-wide broadcast with the MemberUpdtes object to anyone listening.");
                 break;
 
+
+
             /**
              * MESSAGE RECEIVED
              */

@@ -6,6 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="10dp"
+    android:background="@drawable/btn_glass_gray"
     android:padding="5dp">
 
     <ImageView
@@ -27,7 +28,8 @@
         android:layout_width="32dp"
         android:layout_height="32dp"
         android:layout_alignParentEnd="true"
-        android:layout_centerVertical="true"
+        android:layout_centerVertical="false"
+        android:layout_margin="12dp"
         app:srcCompat="@drawable/arrow_right" />
 
     <TextView
@@ -45,9 +47,8 @@
         android:layout_height="wrap_content"
         android:layout_below="@id/imgLeftIcon"
         android:layout_marginTop="7dp"
-        android:background="@drawable/btn_glass_gray"
         android:padding="5dp"
-        android:visibility="gone">
+        android:visibility="visible">
 
         <TableLayout
             android:id="@+id/tableSubRow"
@@ -275,22 +276,11 @@
                 <FrameLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginLeft="5dp"
-                        android:layout_marginRight="5dp"
-                        android:text=""
-                        android:textAppearance="?android:attr/textAppearanceSmall"
-                        android:textColor="#454545"
-                        android:textSize="15sp" />
-                </FrameLayout>
+                    android:layout_weight="1"/>
             </TableRow>
 
 
-            <TableRow
+            <!--<TableRow
                 android:id="@+id/tableRow_5"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -302,18 +292,18 @@
                     android:layout_weight="1">
 
                     <Button
-                        android:id="@+id/btnMessageMember"
+                        android:id="@+id/btnSetAlarm"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginLeft="5dp"
                         android:layout_marginRight="5dp"
                         android:background="@drawable/btn_glass_orange_border_white"
-                        android:text="Send Message"
+                        android:text="Alert me when..."
                         android:textColor="#454545"
                         android:textSize="13sp"
                         android:textStyle="bold" />
                 </FrameLayout>
-            </TableRow>
+            </TableRow>-->
 
 
             <TableRow
@@ -340,6 +330,42 @@
                         android:textStyle="bold" />
                 </FrameLayout>
             </TableRow>
+
+            <TableRow
+                android:id="@+id/tableRow_empty1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+            </TableRow>
+
+            <TableRow
+                android:id="@+id/tableRow_mapRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="2dp"
+                tools:visibility="visible">
+
+                <FrameLayout
+                    android:id="@+id/layoutMapImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="250dp"
+                    android:background="@drawable/btn_glass_gray"
+                    android:padding="3dp">
+
+                    <ImageView
+                        android:id="@+id/imgMap"
+                        android:layout_width="250dp"
+                        android:layout_height="match_parent"
+                        tools:srcCompat="@drawable/map_loading_250x250" />
+                </FrameLayout>
+
+            </TableRow>
+
 
         </TableLayout>
 

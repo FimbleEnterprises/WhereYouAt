@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.os.Handler;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -12,16 +11,22 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.fimbleenterprises.whereuat.helpers.StaticHelpers;
 import com.fimbleenterprises.whereuat.local_database.TripReport;
 import com.fimbleenterprises.whereuat.helpers.MySettingsHelper;
 import com.fimbleenterprises.whereuat.R;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
 
 import java.util.ArrayList;
-import java.util.logging.LogRecord;
 
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.ViewHolder> {
@@ -35,7 +40,7 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
         void onLongClick(TripReport.MemberUpdate memberUpdate);
     }
 
-    public interface OnSendMessageClickListener {
+    public interface OnCreateAlertListener {
         void onClick(TripReport.MemberUpdate memberUpdate);
     }
 
@@ -43,10 +48,15 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
         public void onClick(TripReport.MemberUpdate clickedMember);
     }
 
+    public interface OnStaticMapClick {
+        void onClick();
+    }
+
     static class ItemContainer {
         TripReport.MemberUpdate memberUpdate;
         boolean isExpanded = false;
         Bitmap avatar;
+        Bitmap bitmap;
 
         public ItemContainer(TripReport.MemberUpdate memberUpdate) {
             this.memberUpdate = memberUpdate;
@@ -64,8 +74,9 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
     private LayoutInflater mInflater;
     private OnMemberClickListener mClickListener;
     private OnMemberLongClickListener mLongClickListener;
-    private OnSendMessageClickListener mSendMessageClickListener;
+    private OnCreateAlertListener mCreateAlertListener;
     private OnNavigateToUserClickListener mNavigateToUserClickListener;
+    private OnStaticMapClick mOnStaticMapClickListener;
 
     MySettingsHelper options;
     public boolean isInEditMode = false;
@@ -75,6 +86,8 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
     TextView tvSubtext;
     ImageView imgCaret;
     ImageView imgLeftIcon;
+    ImageView imgMap;
+    TableRow mapRow;
 
     // data is passed into the constructor
     public MemberListAdapter(Context context, TripReport data) {
@@ -94,6 +107,8 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
         tvMainText = view.findViewById(R.id.txtMainText);
         tvSubtext = view.findViewById(R.id.txtSubtext);
         imgCaret = view.findViewById(R.id.imgCaret);
+        mapRow = view.findViewById(R.id.tableRow_mapRow);
+        imgMap = view.findViewById(R.id.imgMap);
         originalTypeface = tvMainText.getTypeface();
 
         return new ViewHolder(view);
@@ -184,12 +199,12 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
 
             // If this entry is "expanded" then show the table with the more esoteric values, otherwise hide/collapse it.
             if (mData.get(position).isExpanded) {
-                holder.subRow.setVisibility(View.VISIBLE);
+                // holder.subRow.setVisibility(View.VISIBLE);
                 holder.imgCaret.setImageResource(R.drawable.about);
-                holder.itemView.setBackgroundColor(Color.parseColor("#44FF9249"));
+                // holder.itemView.setBackgroundColor(Color.parseColor("#44FF9249"));
             } else {
-                holder.itemView.setBackgroundColor(Color.TRANSPARENT);
-                holder.subRow.setVisibility(View.GONE);
+                // holder.itemView.setBackgroundColor(Color.TRANSPARENT);
+                // holder.subRow.setVisibility(View.GONE);
                 holder.imgCaret.setImageResource(R.drawable.arrow_right);
             }
 
@@ -205,9 +220,27 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
                 Log.i(TAG, "onBindViewHolder ");
             }
 
+            // See if the map has an image.
+            if (memberContainer.bitmap == null) {
+                Log.i(TAG, "onBindViewHolder | This row does not have a map image - will retrieve it...");
+                getMapImage(mData.get(position));
+                memberContainer.bitmap = StaticHelpers.Bitmaps.getBitmapFromResource(context, R.drawable.map_loading_250x250);
+            }
+
             // Set the avatar (either the user's Google image or a stock image)
             holder.avatar = memberContainer.avatar;
+            holder.bitmap = memberContainer.bitmap;
             holder.imgLeftIcon.setImageBitmap(holder.avatar);
+            holder.imgMap.setImageBitmap(holder.bitmap);
+            holder.imgMap.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    memberContainer.bitmap = null; // Null out the map bitmap so the adapter will force a new picture.
+                    notifyDataSetChanged();
+                    Log.i(TAG, "onClick | Nulled out the map bitmap.  Should get a redraw soon...");
+                    mOnStaticMapClickListener.onClick();
+                }
+            });
 
             holder.subRow.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -216,12 +249,13 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
                 }
             });
 
-            holder.btnSendMsg.setOnClickListener(new View.OnClickListener() {
+            /*holder.btnAlertMeWhen.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    mSendMessageClickListener.onClick(member);
+                    Toast.makeText(context, "Clicked " + member.displayName, Toast.LENGTH_SHORT).show();
+                    mCreateAlertListener.onClick(member);
                 }
-            });
+            });*/
 
             holder.btnNavigateTo.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -285,28 +319,56 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
         });
     }
 
-    // stores and recycles views as they are scrolled off screen
+    private void getMapImage(final ItemContainer container) {
+        StaticHelpers.Bitmaps.getFromUrl(createMapUrl(container.memberUpdate),
+                new StaticHelpers.Bitmaps.GetImageFromUrlListener() {
+            @Override
+            public void onSuccess(Bitmap bitmap) {
+                container.bitmap = bitmap;
+                container.memberUpdate.bitmap = bitmap;
+                notifyDataSetChanged();
+            }
+
+            @Override
+            public void onFailure(String msg) {
+                Bitmap defaultBitmap = StaticHelpers.Bitmaps.getBitmapFromResource(context, R.drawable.map_loading_250x250);
+                container.avatar = defaultBitmap;
+                container.memberUpdate.avatar = defaultBitmap;
+                notifyDataSetChanged();
+            }
+        });
+    }
+
+    private String createMapUrl(final TripReport.MemberUpdate update) {
+        String lat = Double.toString(update.myLocation.lat);
+        String lon = Double.toString(update.myLocation.lon);
+        String icon = "&markers=icon:https://i.imgur.com/cpZlOJq.png|size:default|color:purple|" + lat + "," + lon;
+        String url = "https://maps.googleapis.com/maps/api/staticmap?center=" + lat + "," + lon + icon + "&zoom=15&size=450x450&sensor=true&key=" + context.getString(R.string.google_maps_key);
+        return url;
+    }
+
+                                // stores and recycles views as they are scrolled off screen
     public class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener, View.OnLongClickListener {
 
         TripReport.MemberUpdate memberUpdateForThisRow;
-
-        // ************************************  Main views **************************************
         RelativeLayout layout; // The main container holding all the row's views.
         ImageView imgLeftIcon;
         TextView txtMainText;
         TextView txtSubtext;
         ImageView imgCaret;
         Bitmap avatar; // Holds a bitmap constructed from the user's photoUrl
-
-        // ********************************  Expanded row views  *********************************
         RelativeLayout subRow; // The container for additional member trip metrics
         TextView txtDistance;
         TextView txtLastReported;
         TextView txtLocationType;
         TextView txtAccuracy;
         TextView txtSpeed;
-        Button btnSendMsg;
+        // Button btnAlertMeWhen;
         Button btnNavigateTo;
+        ImageView imgMap;
+        Bitmap bitmap;
+        TableRow mapRow;
+
 
         ViewHolder(View itemView) {
 
@@ -323,8 +385,9 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
             txtAccuracy = itemView.findViewById(R.id.txtAccuracyValue);
             txtSpeed = itemView.findViewById(R.id.txtSpeedValue);
             imgCaret = itemView.findViewById(R.id.imgCaret);
-            btnSendMsg = itemView.findViewById(R.id.btnMessageMember);
             btnNavigateTo = itemView.findViewById(R.id.btnNavigateTo);
+            mapRow = itemView.findViewById(R.id.tableRow_mapRow);
+            imgMap = itemView.findViewById(R.id.imgMap);
 
             // Click listeners that will ultimately percolate down to the calling activity/fragment
             itemView.setOnClickListener(this);
@@ -382,11 +445,15 @@ public class MemberListAdapter extends RecyclerView.Adapter<MemberListAdapter.Vi
         this.mLongClickListener = longClickListener;
     }
 
-    public void setSendMessageClickListener(OnSendMessageClickListener onSendMessageClickListener) {
-        this.mSendMessageClickListener = onSendMessageClickListener;
+    public void setProximityAlertClickListener(OnCreateAlertListener onCreateAlertListener) {
+        this.mCreateAlertListener = onCreateAlertListener;
     }
 
     public void setNavigateToUserClickListener(OnNavigateToUserClickListener onNavigateToUserClickListener) {
         this.mNavigateToUserClickListener = onNavigateToUserClickListener;
+    }
+
+    public void setOnStaticMapClick(OnStaticMapClick onStaticMapClickListener) {
+        this.mOnStaticMapClickListener = onStaticMapClickListener;
     }
 }

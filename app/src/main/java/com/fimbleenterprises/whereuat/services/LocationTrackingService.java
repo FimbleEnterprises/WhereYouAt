@@ -18,6 +18,7 @@ import android.widget.Toast;
 
 import com.fimbleenterprises.whereuat.AppBroadcastHelper;
 import com.fimbleenterprises.whereuat.MyApp;
+import com.fimbleenterprises.whereuat.generic_objs.MyLocation;
 import com.fimbleenterprises.whereuat.helpers.StaticHelpers;
 import com.fimbleenterprises.whereuat.googleuser.GoogleUser;
 import com.fimbleenterprises.whereuat.helpers.MyNotificationManager;
@@ -40,7 +41,8 @@ public class LocationTrackingService extends Service {
     public static final String MAP_FRAG_SUPPLIED_A_LOCATION = "MAP_FRAG_SUPPLIED_A_LOCATION";
     public static final String SWITCH_TO_ACTIVE_SERVICE = "SWITCH_TO_ACTIVE_SERVICE";
     public static final int NEXT_LOCATION_REQUEST_CODE = 77747774;
-    public static final String LOCATION_TYPE = "passive";
+    public static final int LOCATION_TYPE_ACTIVE = 0;
+    public static final int LOCATION_TYPE_PASSIVE = 1;
     public static final String TRIPCODE = "TRIPCODE";
     private static final String TAG = "PassiveLocationUpdateService";
     private static final int MAIN_NOTIFICATION_ID = 323232;
@@ -184,16 +186,21 @@ public class LocationTrackingService extends Service {
         }
 
         public static void setNextAlarm() {
-            Log.w("", "setNextAlarm: ****************************************************");
-            Log.w("", "setNextAlarm:                  SETTING NEXT ALARM!                ");
-            Log.w("", "setNextAlarm: *****************************************************");
+            try {
+                Log.w("", "setNextAlarm: ****************************************************");
+                Log.w("", "setNextAlarm:                  SETTING NEXT ALARM!                ");
+                Log.w("", "setNextAlarm: *****************************************************");
 
-            alarmIntent = new Intent ( context, PassiveLocationAlarmReceiver.class );
-            pendingIntent = PendingIntent.getBroadcast( MyApp.getAppContext().getApplicationContext()
-                    , NEXT_LOCATION_REQUEST_CODE, alarmIntent, 0 );
-            alarmManager = ( AlarmManager ) MyApp.getAppContext().getSystemService( ALARM_SERVICE );
-            alarmManager.setExact(AlarmManager.RTC_WAKEUP, System.currentTimeMillis()
-                    + CHECK_FREQUENCY, pendingIntent);
+                alarmIntent = new Intent (context, PassiveLocationAlarmReceiver.class );
+                pendingIntent = PendingIntent.getBroadcast( MyApp.getAppContext().getApplicationContext()
+                        , NEXT_LOCATION_REQUEST_CODE, alarmIntent, 0 );
+                alarmManager = ( AlarmManager ) MyApp.getAppContext().getSystemService( ALARM_SERVICE );
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, System.currentTimeMillis()
+                        + CHECK_FREQUENCY, pendingIntent);
+            } catch (Exception e) {
+                Log.w(TAG, "setNextAlarm: | FAILED TO SET NEXT ALARM!");
+                e.printStackTrace();
+            }
         }
 
         public static void getMyLastKnownLocation(InstantLocationListener listener) {
@@ -316,17 +323,25 @@ public class LocationTrackingService extends Service {
          * @param location
          */
         public static void updateServerLocation(Location location) {
+            updateServerLocation(location, false);
+        }
+
+        /**
+         * Sends our local location to the server.  The server returns all member's most recent locations
+         * as far as it knows (including the one we just sent, obviously).  The server will also send an
+         * FCM message with all member's locations as a payload that can (and should) be handled by the
+         * FCM message receiver.
+         * @param location
+         */
+        public static void updateServerLocation(Location location, boolean wasFromMapSensor) {
 
             awaitingServerResponse = true;
 
             Requests.Request request = new Requests.Request(Requests.Request.Function.UPDATE_TRIP);
             request.arguments.add(new Requests.Arguments.Argument("userid", GoogleUser.getCachedUser().id));
             request.arguments.add(new Requests.Arguments.Argument("tripcode", tripcode));
-            request.arguments.add(new Requests.Arguments.Argument("lat", location.getLatitude()));
-            request.arguments.add(new Requests.Arguments.Argument("lon", location.getLongitude()));
-            request.arguments.add(new Requests.Arguments.Argument("accuracy", location.getAccuracy()));
-            request.arguments.add(new Requests.Arguments.Argument("passive/active", LOCATION_TYPE));
-            request.arguments.add(new Requests.Arguments.Argument("velocity", location.getSpeed()));
+            request.arguments.add(new Requests.Arguments.Argument("locationtype", Integer.toString(wasFromMapSensor ? LOCATION_TYPE_ACTIVE : LOCATION_TYPE_PASSIVE)));
+            request.arguments.add(new Requests.Arguments.Argument("location", new MyLocation(location).toJson()));
 
             WebApi api = new WebApi();
             api.makeRequest(request, new WebApi.WebApiResultListener() {

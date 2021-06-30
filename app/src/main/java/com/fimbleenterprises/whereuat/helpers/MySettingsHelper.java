@@ -131,4 +131,14 @@ public class MySettingsHelper {
 
     //endregion
 
+    //region ************ ALERTS ***************
+
+    public void addProximityAlert(String userid, float distanceInMeters) {
+
+    }
+
+    //endregion
+
+
+
 }

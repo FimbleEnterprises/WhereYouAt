@@ -8,15 +8,15 @@ import android.util.Log;
 
 import com.fimbleenterprises.whereuat.MyApp;
 import com.fimbleenterprises.whereuat.generic_objs.ListObjects;
+import com.fimbleenterprises.whereuat.generic_objs.MyLocation;
 import com.fimbleenterprises.whereuat.googleuser.GoogleUser;
 import com.fimbleenterprises.whereuat.helpers.StaticHelpers;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.gson.Gson;
 
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
-import org.joda.time.LocalDateTime;
-import org.joda.time.format.DateTimeFormatter;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -121,6 +121,24 @@ public class TripReport implements Parcelable {
         user.id = mu.userid;
         user.photourl = mu.photoUrl;
         return user;
+    }
+
+    public MemberUpdate findMyUpdate() {
+        for (MemberUpdate mem : this.list) {
+            if (mem.userid.equals(GoogleUser.getCachedUser().id)) {
+                return mem;
+            }
+        }
+        return null;
+    }
+
+    public MemberUpdate findMemberUpdate(String userid) {
+        for (MemberUpdate mem : this.list) {
+            if (mem.userid.equals(userid)) {
+                return mem;
+            }
+        }
+        return null;
     }
 
     /**
@@ -267,6 +285,14 @@ public class TripReport implements Parcelable {
         return gson.toJson(this);
     }
 
+    public LatLngBounds toLatLngBounds() {
+        LatLngBounds.Builder builder = new LatLngBounds.Builder();
+        for (MemberUpdate update : this.list) {
+            builder.include(update.toLatLng());
+        }
+        return builder.build();
+    }
+
     @Override
     public String toString() {
         return "Tripcode: " + this.tripcode + " | Members: " + this.list.size();
@@ -321,8 +347,16 @@ public class TripReport implements Parcelable {
      */
     public static class MemberUpdate implements Parcelable {
 
-        public static final String LOCATION_TYPE_ACTIVE = "active";
-        public static final String LOCATION_TYPE_PASSIVE = "passive";
+        private static final String JSON_CREATEDON = "createdOn";
+        private static final String JSON_MODIFIEDON = "modifiedOn";
+        private static final String JSON_DISPLAYNAME = "displayName";
+        private static final String JSON_EMAIL = "email";
+        private static final String JSON_PHOTOURL = "photoUrl";
+        private static final String JSON_TRIPCODE = "tripcode";
+        private static final String JSON_USERID = "userid";
+        private static final String JSON_LOCATION_TYPE = "locationtype";
+        private static final String JSON_MYLOCTION = "location";
+        public Bitmap bitmap;
 
         private String createdOn;
         /**
@@ -333,15 +367,15 @@ public class TripReport implements Parcelable {
          * The user's email address
          */
         public String email;
-        /**
+/*        *//**
          * The user's latitude
-         */
+         *//*
         public double lat;
-        /**
+        *//**
          * The user's longitude
-         */
+         *//*
         public double lon;
-        /**
+        *//**
          * The accuracy, in meters, as reported by the sensor obtaining the location.
          */
         public float accuracy_meters;
@@ -366,19 +400,23 @@ public class TripReport implements Parcelable {
         /**
          * The speed of the user at the time of the update
          */
-        public double velocity = 0f;
+        // public double velocity = 0f;
         /**
          * A bitmap of the user's avatar
          */
         public Bitmap avatar;
-
+        /**
+         * The location object itself (as json) for all that sexy meta data.
+         */
+        private String location;
+        /**
+         * The location object itself for all that sexy meta data.
+         */
+        public MyLocation myLocation;
         /**
          * Can be used in list adapters for aesthetic purposes.
          */
         public boolean isSeparator;
-
-        // public Bitmap avatar;
-
         /**
          * The service used to obtain this location, typically, "passive" or "active"
          */
@@ -388,93 +426,95 @@ public class TripReport implements Parcelable {
 
         public MemberUpdate(JSONObject json) {
             try {
-                if (!json.isNull("createdOn")) {
-                    this.createdOn = new DateTime(json.getString("modifiedOn"), DateTimeZone.UTC).toString();
+                if (!json.isNull(JSON_CREATEDON)) {
+                    this.createdOn = new DateTime(json.getString(JSON_CREATEDON), DateTimeZone.UTC).toString();
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
+            } // createdon
             try {
-                if (!json.isNull("displayName")) {
-                    this.displayName = (json.getString("displayName"));
+                if (!json.isNull(JSON_DISPLAYNAME)) {
+                    this.displayName = (json.getString(JSON_DISPLAYNAME));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
+            } // displayname
             try {
-                if (!json.isNull("email")) {
-                    this.email = (json.getString("email"));
+                if (!json.isNull(JSON_EMAIL)) {
+                    this.email = (json.getString(JSON_EMAIL));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
+            } // email
             try {
-                if (!json.isNull("lat")) {
-                    this.lat = json.getDouble("lat");
+                if (!json.isNull(JSON_MODIFIEDON)) {
+                    this.modifiedOn = new DateTime(json.getString(JSON_MODIFIEDON), DateTimeZone.UTC).toString();
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
+            } // modifiedon
             try {
-                if (!json.isNull("lon")) {
-                    this.lon = json.getDouble("lon");
+                if (!json.isNull(JSON_PHOTOURL)) {
+                    this.photoUrl = (json.getString(JSON_PHOTOURL));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
+            } // photourl
             try {
-                if (!json.isNull("accuracy_meters")) {
-                    this.accuracy_meters = (json.getLong("accuracy_meters"));
+                if (!json.isNull(JSON_TRIPCODE)) {
+                    this.tripcode = (json.getString(JSON_TRIPCODE));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
+            } // tripcode
             try {
-                if (!json.isNull("modifiedOn")) {
-                    this.modifiedOn = new DateTime(json.getString("modifiedOn"), DateTimeZone.UTC).toString();
+                if (!json.isNull(JSON_USERID)) {
+                    this.userid = (json.getString(JSON_USERID));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
+            } // userid
             try {
-                if (!json.isNull("photoUrl")) {
-                    this.photoUrl = (json.getString("photoUrl"));
+                if (!json.isNull(JSON_LOCATION_TYPE)) {
+                    this.locationtype = (json.getString(JSON_LOCATION_TYPE));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
+            } // locationtype
             try {
-                if (!json.isNull("tripcode")) {
-                    this.tripcode = (json.getString("tripcode"));
+                if (!json.isNull(JSON_MYLOCTION)) {
+                    this.location = json.getString(JSON_MYLOCTION);
+                    this.myLocation = new MyLocation(this.location);
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
-            try {
-                if (!json.isNull("userid")) {
-                    this.userid = (json.getString("userid"));
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            try {
-                if (!json.isNull("locationtype")) {
-                    this.locationtype = (json.getString("locationtype"));
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            try {
-                if (!json.isNull("velocity")) {
-                    this.velocity = (json.getDouble("velocity"));
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
+            } // location
+        }
+
+        public GoogleUser toGoogleUser() {
+            GoogleUser user = new GoogleUser();
+            user.fullname = this.displayName;
+            user.photourl = this.photoUrl;
+            user.email = this.email;
+            user.id = this.userid;
+
+            return user;
         }
 
         public LatLng toLatLng() {
-            return new LatLng(this.lat, this.lon);
+
+            // This should rarely, if ever, evaluate to true!
+            if (this.myLocation == null && this.location == null) {
+                return null;
+            }
+
+            // One of the two is not null, if it's location then myLocation must be, thus we construct it.
+            if (this.myLocation == null) {
+                this.myLocation = new MyLocation(this.location);
+            }
+
+            // Finally, return a fucking LatLng
+            return new LatLng(this.myLocation.lat, this.myLocation.lon);
         }
 
         public ListObjects.ListObject toBasicObject() {
@@ -496,8 +536,8 @@ public class TripReport implements Parcelable {
             locationA.setLongitude(position.longitude);
             locationA.setLatitude(position.latitude);
 
-            locationB.setLongitude(this.lon);
-            locationB.setLatitude(this.lat);
+            locationB.setLongitude(this.myLocation.lon);
+            locationB.setLatitude(this.myLocation.lat);
 
             return locationA.distanceTo(locationB);
         }
@@ -511,11 +551,11 @@ public class TripReport implements Parcelable {
             Location locationA = new Location("LOGICAL");
             Location locationB = new Location("LOGICAL");
 
-            locationA.setLongitude(position.lon);
-            locationA.setLatitude(position.lat);
+            locationA.setLongitude(position.myLocation.lon);
+            locationA.setLatitude(position.myLocation.lat);
 
-            locationB.setLongitude(this.lon);
-            locationB.setLatitude(this.lat);
+            locationB.setLongitude(this.myLocation.lon);
+            locationB.setLatitude(this.myLocation.lat);
 
             return locationA.distanceTo(locationB);
         }
@@ -528,14 +568,14 @@ public class TripReport implements Parcelable {
 
             Log.i(TAG, "distanceTo");
 
-            if (location == null) {
+            if (location == null || this.myLocation == null) {
                 Log.w(TAG, "distanceTo: | location to measure to was null!");
                 return 0;
             }
 
             Location locationA = new Location("LOGICAL");
-            locationA.setLongitude(this.lon);
-            locationA.setLatitude(this.lat);
+            locationA.setLongitude(this.myLocation.lon);
+            locationA.setLatitude(this.myLocation.lat);
 
             float dist = locationA.distanceTo(location);
 
@@ -579,63 +619,6 @@ public class TripReport implements Parcelable {
             return (int) mins;
 
         }
-
-        protected MemberUpdate(Parcel in) {
-            createdOn = in.readString();
-            displayName = in.readString();
-            email = in.readString();
-            lat = in.readDouble();
-            lon = in.readDouble();
-            accuracy_meters = in.readFloat();
-            modifiedOn = in.readString();
-            photoUrl = in.readString();
-            tripcode = in.readString();
-            userid = in.readString();
-            isSeparator = in.readByte() != 0x00;
-            locationtype = in.readString();
-            /*try {
-                avatar = in.readParcelable(Bitmap.class.getClassLoader());
-            } catch (Exception e) {
-                e.printStackTrace();
-            }*/
-        }
-
-        @Override
-        public void writeToParcel(Parcel dest, int flags) {
-            dest.writeString(createdOn);
-            dest.writeString(displayName);
-            dest.writeString(email);
-            dest.writeDouble(lat);
-            dest.writeDouble(lon);
-            dest.writeFloat(accuracy_meters);
-            dest.writeString(modifiedOn);
-            dest.writeString(photoUrl);
-            dest.writeString(tripcode);
-            dest.writeString(userid);
-            dest.writeByte((byte) (isSeparator ? 0x01 : 0x00));
-            dest.writeString(locationtype);
-            /*if (avatar != null) {
-                dest.writeValue(avatar);
-            }*/
-        }
-
-        @Override
-        public int describeContents() {
-            return 0;
-        }
-
-        @SuppressWarnings("unused")
-        public static final Parcelable.Creator<MemberUpdate> CREATOR = new Parcelable.Creator<MemberUpdate>() {
-            @Override
-            public MemberUpdate createFromParcel(Parcel in) {
-                return new MemberUpdate(in);
-            }
-
-            @Override
-            public MemberUpdate[] newArray(int size) {
-                return new MemberUpdate[size];
-            }
-        };
 
         @Override
         public String toString() {
@@ -709,13 +692,72 @@ public class TripReport implements Parcelable {
         }
 
         public float getSpeedInMilesPerHour() {
-            float strVelocity = Float.parseFloat(Double.toString(this.velocity));
+
+            if (this.myLocation == null) {
+                return 0;
+            }
+
+            float strVelocity = Float.parseFloat(Double.toString(this.myLocation.velocity));
             return Float.parseFloat(StaticHelpers.Geo.getSpeedInMph(strVelocity, false, 2));
         }
 
         public float getAccuracy() {
             return StaticHelpers.Numbers.formatAsZeroDecimalPointNumber(this.accuracy_meters);
         }
+
+        protected MemberUpdate(Parcel in) {
+            createdOn = in.readString();
+            displayName = in.readString();
+            email = in.readString();
+            accuracy_meters = in.readFloat();
+            modifiedOn = in.readString();
+            photoUrl = in.readString();
+            tripcode = in.readString();
+            userid = in.readString();
+            distanceFromMe = in.readFloat();
+            avatar = (Bitmap) in.readValue(Bitmap.class.getClassLoader());
+            location = in.readString();
+            // myLocation = (MyLocation) in.readValue(MyLocation.class.getClassLoader());
+            isSeparator = in.readByte() != 0x00;
+            locationtype = in.readString();
+            bitmap = (Bitmap) in.readValue(Bitmap.class.getClassLoader());
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeString(createdOn);
+            dest.writeString(displayName);
+            dest.writeString(email);
+            dest.writeFloat(accuracy_meters);
+            dest.writeString(modifiedOn);
+            dest.writeString(photoUrl);
+            dest.writeString(tripcode);
+            dest.writeString(userid);
+            dest.writeFloat(distanceFromMe);
+            dest.writeValue(avatar);
+            dest.writeString(location);
+            dest.writeByte((byte) (isSeparator ? 0x01 : 0x00));
+            dest.writeString(locationtype);
+            dest.writeValue(bitmap);
+        }
+
+        @SuppressWarnings("unused")
+        public static final Parcelable.Creator<MemberUpdate> CREATOR = new Parcelable.Creator<MemberUpdate>() {
+            @Override
+            public MemberUpdate createFromParcel(Parcel in) {
+                return new MemberUpdate(in);
+            }
+
+            @Override
+            public MemberUpdate[] newArray(int size) {
+                return new MemberUpdate[size];
+            }
+        };
     }
     // endregion
 }

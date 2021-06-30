@@ -30,6 +30,10 @@ public class MyViewPager extends ViewPager {
     public int currentPosition;
     private int pageCount = -1;
     private Intent pendingIntent;
+    public static final int FRAG_MEMBERS = 0;
+    public static final int FRAG_MAP = 1;
+    public static final int FRAG_MESSAGES = 2;
+
     OnRealPageChangedListener onRealPageChangedListener;
 
     public interface OnRealPageChangedListener {

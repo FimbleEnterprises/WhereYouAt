@@ -4,7 +4,6 @@ import android.content.Intent;
 import android.location.Location;
 import android.util.Log;
 
-import com.fimbleenterprises.whereuat.generic_objs.UserMessage;
 import com.fimbleenterprises.whereuat.googleuser.GoogleUser;
 import com.fimbleenterprises.whereuat.local_database.TripReport;
 
@@ -46,7 +45,8 @@ public class AppBroadcastHelper {
     public enum BroadcastType {
         ACTIVE_LOCATION_SERVICE_STARTED, ACTIVE_LOCATION_SERVICE_STOPPED, PASSIVE_LOCATION_SERVICE_STOPPED,
         LOCATION_TRACKING_SERVICE_STARTED, SERVER_TRIP_STOPPED, SERVER_TRIP_STARTED, LOCATION_CHANGED_LOCALLY,
-        SERVER_LOCATION_UPDATED, USER_JOINED_TRIP, USER_LEFT_TRIP, USER_MARKER_CLICKED, MESSAGE_RECEIVED;
+        SERVER_LOCATION_UPDATED, USER_JOINED_TRIP, USER_LEFT_TRIP, USER_MARKER_CLICKED, MESSAGE_RECEIVED,
+        PAGE_CHANGED, ALERT_BY_SPOT, ALERT_BY_ME;
     }
 
     /**
@@ -114,6 +114,11 @@ public class AppBroadcastHelper {
             case MESSAGE_RECEIVED:
                 // Nothing to append to broadcast
                 break;
+            case ALERT_BY_ME:
+                //Nothing to append
+                break;
+            case ALERT_BY_SPOT:
+                intent.putExtra(PARCELED_EXTRA, (GoogleUser) object);
         }
 
         MyApp.getAppContext().sendBroadcast(intent);

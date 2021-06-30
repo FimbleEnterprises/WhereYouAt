@@ -8,12 +8,14 @@ import android.database.sqlite.SQLiteDatabase;
 import android.util.Log;
 
 import com.fimbleenterprises.whereuat.MyApp;
+import com.fimbleenterprises.whereuat.generic_objs.ProximityAlert;
 import com.fimbleenterprises.whereuat.generic_objs.UserMessage;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.ALL_PROXIMITY_ALERT_COLUMNS;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.ALL_TRIPENTRY_COLUMNS;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.ALL_USER_MESSAGE_COLUMNS;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_ACC;
@@ -22,10 +24,12 @@ import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUM
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_JSON;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_PROVIDER;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_TRIPCODE;
+import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_USERID;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.COLUMN_USER_MESSAGE_AS_JSON;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.TABLE_NAME_MEMBERUPDATES;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.TABLE_NAME_MESSAGES;
 import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.TABLE_NAME_MYLOCATION;
+import static com.fimbleenterprises.whereuat.local_database.MySQLiteHelper.TABLE_NAME_PROXIMITY_ALERTS;
 
 public class TripDatasource {
 
@@ -226,7 +230,144 @@ public class TripDatasource {
         }
     }
 
+    /**
+     * Gets all ProximityAlert objects from the database for a given userid.
+     * @return An array list of alerts, empty if none found and null on error.
+     */
+    public ArrayList<ProximityAlert> getAllAlerts() {
 
+        ArrayList<ProximityAlert> alerts = new ArrayList<>();
+
+        Cursor c = database.query(TABLE_NAME_PROXIMITY_ALERTS, ALL_PROXIMITY_ALERT_COLUMNS, null, null,
+                null, null, COLUMN_ID + " asc");
+
+        try {
+            while (c.moveToNext()) {
+                int jsonIndex = c.getColumnIndex(COLUMN_JSON);
+                String json = c.getString(jsonIndex);
+                ProximityAlert alert = new ProximityAlert(json);
+                alerts.add(alert);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+        return alerts;
+    }
+
+    /**
+     * Gets all ProximityAlert objects from the database for a given userid.
+     * @return An array list of alerts, empty if none found and null on error.
+     */
+    public ArrayList<ProximityAlert> getAlertsForUser(String userid) {
+
+        ArrayList<ProximityAlert> alerts = new ArrayList<>();
+
+        String whereClause = COLUMN_USERID + " = ?";
+        String[] whereArgs = {String.valueOf(userid)};
+
+        Cursor c = database.query(TABLE_NAME_PROXIMITY_ALERTS, ALL_PROXIMITY_ALERT_COLUMNS, whereClause, whereArgs,
+                null, null, COLUMN_ID + " asc");
+
+        try {
+            while (c.moveToNext()) {
+                int jsonIndex = c.getColumnIndex(COLUMN_JSON);
+                String json = c.getString(jsonIndex);
+                ProximityAlert alert = new ProximityAlert(json);
+                alerts.add(alert);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+        return alerts;
+    }
+
+    /**
+     * Gets all ProximityAlert objects from the database for a given trip.
+     * @return An array list of alerts, empty if none found and null on error.
+     */
+    public ArrayList<ProximityAlert> getAlertsForTrip(String tripcode) {
+
+        ArrayList<ProximityAlert> alerts = new ArrayList<>();
+
+        String whereClause = COLUMN_TRIPCODE + " = ?";
+        String[] whereArgs = {String.valueOf(tripcode)};
+
+        Cursor c = database.query(TABLE_NAME_PROXIMITY_ALERTS, ALL_PROXIMITY_ALERT_COLUMNS, whereClause, whereArgs,
+                null, null, COLUMN_ID + " asc");
+
+        try {
+            while (c.moveToNext()) {
+                int jsonIndex = c.getColumnIndex(COLUMN_JSON);
+                String json = c.getString(jsonIndex);
+                ProximityAlert alert = new ProximityAlert(json);
+                alerts.add(alert);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+        return alerts;
+    }
+
+    public boolean saveAlert(ProximityAlert alert) {
+        boolean result = true;
+        try {
+            ContentValues values = new ContentValues();
+            values.put(COLUMN_JSON, alert.toGson());
+            values.put(COLUMN_TRIPCODE, alert.tripcode);
+            values.put(COLUMN_USERID, alert.trackedUser.id);
+
+            result = (database.insert(TABLE_NAME_PROXIMITY_ALERTS, null, values) > 0);
+            Log.i(TAG, "saveAlert | Result: " + result);
+
+        } catch (SQLException e) {
+            result = false;
+            e.printStackTrace();
+        }
+        Log.i(TAG, "updated full trip " + result);
+        return result;
+    }
+
+    public boolean deleteAlert(int id) {
+        boolean result;
+
+        try {
+            database.rawQuery("DELETE FROM " + TABLE_NAME_PROXIMITY_ALERTS + " WHERE "
+                    + COLUMN_ID + " = " + id, null);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public int deleteAllUserAlerts(String userid) {
+        boolean result;
+
+        String whereClause = COLUMN_USERID + " = ?";
+        String[] whereArgs = { userid };
+
+        return (database.delete(TABLE_NAME_PROXIMITY_ALERTS, whereClause, whereArgs));
+    }
+
+    public int deleteAllTripAlerts(String tripcode) {
+        boolean result;
+
+        String whereClause = COLUMN_TRIPCODE + " = ?";
+        String[] whereArgs = { tripcode };
+
+        return (database.delete(TABLE_NAME_PROXIMITY_ALERTS, whereClause, whereArgs));
+    }
+
+    public int deleteAlerts() {
+        boolean result;
+        return (database.delete(TABLE_NAME_PROXIMITY_ALERTS, null, null));
+    }
 
     /**
      * Gets an array of MemberUpdates in the database.  Keep in mind that each row represents a

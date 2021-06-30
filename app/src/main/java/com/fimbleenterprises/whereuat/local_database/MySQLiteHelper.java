@@ -15,7 +15,7 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
 
     private final static String TAG = "MySQLiteHelper.";
     public static final String DATABASE_NAME = "whereyouat.db";
-    private static final int DATABASE_VERSION = 5;
+    private static final int DATABASE_VERSION = 6;
     private MySettingsHelper options;
 
     //////////////////////////////////////////////////////////////////////////////////////////////
@@ -24,6 +24,7 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
     public static final String TABLE_NAME_MEMBERUPDATES = "TRIPENTRIES";
     public static final String TABLE_NAME_MESSAGES = "TABLE_NAME_MESSAGES";
     public static final String TABLE_NAME_MYLOCATION = "TABLE_NAME_MYLOCATION";
+    public static final String TABLE_NAME_PROXIMITY_ALERTS = "TABLE_NAME_PROXIMITY_ALERTS";
 
     //////////////////////////////////////////////////////////////////////////////////////////////
     // COLUMN NAMES
@@ -31,6 +32,7 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
     public static final String COLUMN_ID = "_ID";
     public static final String COLUMN_DTDATETIME = "DTDATETIME"; // Date format: ISO8601
     public static final String COLUMN_JSON = "JSON";
+    public static final String COLUMN_USERID = "COLUMN_USERID";
     public static final String COLUMN_TRIPCODE = "tripcode";
     public static final String COLUMN_MISC1 = "MISC1";
     public static final String COLUMN_MISC2 = "MISC2";
@@ -78,6 +80,13 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
             COLUMN_DTDATETIME
     };
 
+    public static final String[] ALL_PROXIMITY_ALERT_COLUMNS = {
+            COLUMN_ID,
+            COLUMN_JSON,
+            COLUMN_USERID,
+            COLUMN_TRIPCODE
+    };
+
     //////////////////////////////////////////////////////////////////////////////////////////////
     // DATA TYPES
     //////////////////////////////////////////////////////////////////////////////////////////////
@@ -113,11 +122,12 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
             COLUMN_ID + " integer primary key autoincrement, " +
             COLUMN_DTDATETIME + " text, " +
             COLUMN_USER_MESSAGE_AS_JSON + " text);";
-            /*COLUMN_SENDERID + " text, " +
-            COLUMN_IMAGEURL + " text, " +
-            COLUMN_RECIPIENTID + " text, " +
-            COLUMN_MESSAGE + " text, " +
-            COLUMN_ISREAD + " integer); ";*/
+
+    private static final String PROXIMITY_ALERT_TABLE_CREATE_QUERY = "create table " + TABLE_NAME_PROXIMITY_ALERTS + "(" +
+            COLUMN_ID + " integer primary key autoincrement, " +
+            COLUMN_USERID + " text, " +
+            COLUMN_TRIPCODE + " text, " +
+            COLUMN_JSON + " text);";
 
 
     public MySQLiteHelper(Context context) {
@@ -212,6 +222,17 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+        try {
+            if (! this.tableExists(TABLE_NAME_PROXIMITY_ALERTS, db)) {
+                Log.e(TAG + "onOpen", "The proximity alerts table does not exist.  Will try to create it now.");
+                createTable(db, PROXIMITY_ALERT_TABLE_CREATE_QUERY, TABLE_NAME_PROXIMITY_ALERTS);
+            } else {
+                Log.d(TAG + "onOpen", "The proximity alerts table exists.  No need to create it.");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -252,6 +273,13 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
         addColumnIfMissing(TABLE_NAME_MYLOCATION, COLUMN_ACC, TYPE_REAL, db);
         addColumnIfMissing(TABLE_NAME_MYLOCATION, COLUMN_DTDATETIME, TYPE_REAL, db);
         addColumnIfMissing(TABLE_NAME_MYLOCATION, COLUMN_PROVIDER, TYPE_TEXT, db);
+
+        // Proximity alerts table
+        addColumnIfMissing(TABLE_NAME_PROXIMITY_ALERTS, COLUMN_ID, TYPE_INTEGER, db);
+        addColumnIfMissing(TABLE_NAME_PROXIMITY_ALERTS, COLUMN_JSON, TYPE_TEXT, db);
+        addColumnIfMissing(TABLE_NAME_PROXIMITY_ALERTS, COLUMN_USERID, TYPE_TEXT, db);
+        addColumnIfMissing(TABLE_NAME_PROXIMITY_ALERTS, COLUMN_TRIPCODE, TYPE_TEXT, db);
+
 
     }
 

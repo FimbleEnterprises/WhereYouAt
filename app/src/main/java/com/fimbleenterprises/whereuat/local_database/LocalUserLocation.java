@@ -96,8 +96,8 @@ public class LocalUserLocation {
      */
     public float distanceTo(TripReport.MemberUpdate position) {
         Location loc = new Location("LOGICAL");
-        loc.setLatitude(position.lat);
-        loc.setLongitude(position.lon);
+        loc.setLatitude(position.myLocation.lat);
+        loc.setLongitude(position.myLocation.lon);
 
         return loc.distanceTo(this.toCrudeLocation());
     }
